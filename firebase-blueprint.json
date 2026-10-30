@@ -1,0 +1,174 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Thông tin học sinh trong lớp",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "fullName": { "type": "string" },
+        "gender": { "type": "string" },
+        "dob": { "type": "string" },
+        "group": { "type": "number" },
+        "role": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "parentEmail": { "type": "string" },
+        "zaloPhone": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["id", "code", "fullName", "group", "role"]
+    },
+    "DailyLogEntry": {
+      "title": "DailyLogEntry",
+      "description": "Nhật ký ghi nhận vi phạm và tuyên dương",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "group": { "type": "number" },
+        "date": { "type": "string" },
+        "week": { "type": "number" },
+        "semester": { "type": "number" },
+        "dayOfWeek": { "type": "string" },
+        "session": { "type": "string" },
+        "period": { "type": "number" },
+        "criteriaId": { "type": "string" },
+        "criteriaName": { "type": "string" },
+        "category": { "type": "string" },
+        "delta": { "type": "number" },
+        "note": { "type": "string" },
+        "loggedByRole": { "type": "string" },
+        "loggedByName": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "week", "delta", "criteriaName"]
+    },
+    "ManualScoreAdjustment": {
+      "title": "ManualScoreAdjustment",
+      "description": "Điều chỉnh điểm thủ công của GVCN",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "week": { "type": "number" },
+        "semester": { "type": "number" },
+        "delta": { "type": "number" },
+        "reason": { "type": "string" },
+        "adjustedBy": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "studentId", "week", "delta", "reason"]
+    },
+    "CriteriaItem": {
+      "title": "CriteriaItem",
+      "description": "Tiêu chí chấm điểm thi đua",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "codeName": { "type": "string" },
+        "category": { "type": "string" },
+        "delta": { "type": "number" },
+        "type": { "type": "string" },
+        "isSevere": { "type": "boolean" }
+      },
+      "required": ["id", "codeName", "category", "delta", "type"]
+    },
+    "CriteriaCategory": {
+      "title": "CriteriaCategory",
+      "description": "Nhóm tiêu chí lớn",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "maxPoints": { "type": "number" },
+        "color": { "type": "string" }
+      },
+      "required": ["id", "name", "maxPoints"]
+    },
+    "ClassConfig": {
+      "title": "ClassConfig",
+      "description": "Cấu hình chung lớp học",
+      "type": "object",
+      "properties": {
+        "schoolName": { "type": "string" },
+        "className": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "homeroomTeacher": { "type": "string" },
+        "teacherEmail": { "type": "string" },
+        "teacherPhone": { "type": "string" },
+        "currentWeek": { "type": "number" },
+        "currentSemester": { "type": "number" },
+        "baseScore": { "type": "number" }
+      },
+      "required": ["className", "currentWeek"]
+    },
+    "AccessCodesConfig": {
+      "title": "AccessCodesConfig",
+      "description": "Mã phân quyền các vai trò cán bộ lớp",
+      "type": "object",
+      "properties": {
+        "teacher": { "type": "string" },
+        "team1": { "type": "string" },
+        "team2": { "type": "string" },
+        "team3": { "type": "string" },
+        "team4": { "type": "string" },
+        "monitor": { "type": "string" }
+      },
+      "required": ["teacher", "team1", "team2", "team3", "team4", "monitor"]
+    },
+    "NotificationRecord": {
+      "title": "NotificationRecord",
+      "description": "Lịch sử thông báo phụ huynh",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "recipientContact": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "title", "message"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Danh sách học sinh của lớp"
+    },
+    "/daily_logs/{logId}": {
+      "schema": "DailyLogEntry",
+      "description": "Nhật ký ghi nhận thi đua"
+    },
+    "/manual_adjustments/{adjId}": {
+      "schema": "ManualScoreAdjustment",
+      "description": "Điểm điều chỉnh thủ công"
+    },
+    "/criteria_items/{criteriaId}": {
+      "schema": "CriteriaItem",
+      "description": "Danh mục tiêu chí điểm"
+    },
+    "/criteria_categories/{categoryId}": {
+      "schema": "CriteriaCategory",
+      "description": "Các nhóm tiêu chí"
+    },
+    "/settings/class_config": {
+      "schema": "ClassConfig",
+      "description": "Thông tin lớp học"
+    },
+    "/settings/access_codes": {
+      "schema": "AccessCodesConfig",
+      "description": "Mã phân quyền cán bộ"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "NotificationRecord",
+      "description": "Nhật ký gửi thông báo Zalo/Email"
+    }
+  }
+}

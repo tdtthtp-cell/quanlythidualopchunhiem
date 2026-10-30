@@ -1,0 +1,6 @@
+{
+  "name": "Hệ Thống Quản Lý Thi Đua Lớp Chủ Nhiệm",
+  "description": "Phần mềm chấm điểm thi đua tự động, nhật ký sinh hoạt lớp 4 tổ, xếp hạng tuần/tháng, báo cáo PDF và thông báo phụ huynh Zalo/Email",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
