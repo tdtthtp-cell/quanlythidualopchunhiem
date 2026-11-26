@@ -105,7 +105,13 @@ export interface GroupPeriodSummary extends GroupWeeklySummary {
   weeksEvaluated: number;
 }
 
-export type UserRole = 'teacher' | 'team_leader' | 'class_monitor' | 'student' | 'delegated';
+export type UserRole =
+  | 'super_admin'
+  | 'teacher'
+  | 'team_leader'
+  | 'class_monitor'
+  | 'student'
+  | 'delegated';
 
 export interface DelegatedPermission {
   canLogDaily: boolean;      // Ghi nhận vi phạm & tuyên dương việc tốt
@@ -132,6 +138,7 @@ export interface DelegatedUser {
 export interface CurrentUser {
   role: UserRole;
   name: string;
+  email?: string;
   groupAccess?: GroupNumber | 'all'; // Tổ trưởng chỉ phụ trách tổ của mình hoặc có thể xem cả lớp
   title: string;
   delegatedPermissions?: DelegatedPermission;
@@ -203,6 +210,33 @@ export interface ScheduledActivity {
   lastRemindedAt?: string;
   reminderCount: number;
   createdBy: string;
+  createdAt: string;
+}
+
+export interface ClassOfficersAssignment {
+  monitorName: string;       // Lớp trưởng
+  viceAcademicName: string;  // Lớp phó học tập
+  viceLaborName: string;     // Lớp phó lao động
+  redFlagName: string;       // Cán sự cờ đỏ
+  team1LeaderName: string;   // Tổ trưởng Tổ 1
+  team2LeaderName: string;   // Tổ trưởng Tổ 2
+  team3LeaderName: string;   // Tổ trưởng Tổ 3
+  team4LeaderName: string;   // Tổ trưởng Tổ 4
+}
+
+export interface HomeroomClass {
+  id: string;
+  className: string;         // VD: "Lớp 10A3", "Lớp 10A1", "Lớp 11A2"
+  grade: '10' | '11' | '12';
+  academicYear: string;
+  schoolName: string;
+  homeroomTeacher: string;
+  teacherEmail: string;
+  teacherPhone: string;
+  accessCodes: AccessCodesConfig;
+  officers: ClassOfficersAssignment;
+  studentCount: number;
+  isActive: boolean;
   createdAt: string;
 }
 

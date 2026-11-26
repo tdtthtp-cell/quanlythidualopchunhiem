@@ -16,8 +16,16 @@ import {
   BookOpen,
   KeyRound,
   LogOut,
+  Crown,
+  Building2,
 } from 'lucide-react';
-import { ClassConfig, CurrentUser, UserRole, GroupNumber, AccessCodesConfig, DelegatedUser } from '../types';
+import {
+  ClassConfig,
+  CurrentUser,
+  DelegatedUser,
+  HomeroomClass,
+} from '../types';
+import { SUPER_ADMIN_EMAIL } from '../firebase';
 
 interface HeaderNavProps {
   config: ClassConfig;
@@ -34,6 +42,8 @@ interface HeaderNavProps {
   onOpenStudentMgmt: () => void;
   onOpenBackup: () => void;
   onOpenManageAccessCodes: () => void;
+  onOpenSuperAdminModal?: () => void;
+  homeroomClasses?: HomeroomClass[];
   studentCount?: number;
   delegatedUsers?: DelegatedUser[];
   pendingScheduleCount?: number;
@@ -51,24 +61,32 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   onOpenAlerts,
   onOpenSettings,
   onOpenCriteriaConfig,
-  onOpenStudentMgmt,
   onOpenBackup,
   onOpenManageAccessCodes,
+  onOpenSuperAdminModal,
+  homeroomClasses = [],
   studentCount = 0,
   delegatedUsers = [],
   pendingScheduleCount = 0,
 }) => {
   const weeks = Array.from({ length: 35 }, (_, i) => i + 1);
 
+  const isSuperOrTeacher =
+    currentUser.role === 'super_admin' || currentUser.role === 'teacher';
+
   const currentRoleValue =
-    currentUser.role === 'teacher'
+    currentUser.role === 'super_admin'
+      ? 'super_admin'
+      : currentUser.role === 'teacher'
       ? 'teacher'
       : currentUser.role === 'team_leader'
       ? `team_leader_${currentUser.groupAccess}`
       : currentUser.role === 'class_monitor'
       ? 'class_monitor'
       : currentUser.role === 'delegated'
-      ? (currentUser.delegatedUserId ? `delegated_${currentUser.delegatedUserId}` : 'delegated_prompt')
+      ? currentUser.delegatedUserId
+        ? `delegated_${currentUser.delegatedUserId}`
+        : 'delegated_prompt'
       : 'student';
 
   const handleSelectRole = (newRoleValue: string) => {
@@ -96,23 +114,38 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               <Award className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-lg font-bold text-slate-900 tracking-tight">
                   Quản Lý Thi Đua Lớp Chủ Nhiệm
                 </h1>
                 <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">
                   {config.className}
                 </span>
+                {homeroomClasses.length > 1 && isSuperOrTeacher && onOpenSuperAdminModal && (
+                  <button
+                    type="button"
+                    onClick={onOpenSuperAdminModal}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-full border border-amber-300 transition-colors"
+                    title="Chuyển đổi lớp chủ nhiệm hoặc phân quyền Ban cán sự"
+                  >
+                    <Building2 className="w-3 h-3 text-amber-600" />
+                    Hệ thống {homeroomClasses.length} lớp
+                  </button>
+                )}
                 <span className="hidden sm:inline-block px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">
                   Năm học {config.academicYear}
                 </span>
-                <span className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200" title="Dữ liệu được lưu trữ và tự động đồng bộ tức thì giữa điện thoại, máy tính và máy tính bảng qua Cloud Firestore">
+                <span
+                  className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200"
+                  title="Dữ liệu được lưu trữ và tự động đồng bộ tức thì giữa điện thoại, máy tính và máy tính bảng qua Cloud Firestore"
+                >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   Đồng bộ đa thiết bị
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                {config.schoolName} • GVCN: <span className="font-medium text-slate-700">{config.homeroomTeacher}</span>
+                {config.schoolName} • GVCN:{' '}
+                <span className="font-medium text-slate-700">{config.homeroomTeacher}</span>
               </p>
             </div>
           </div>
@@ -162,6 +195,11 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                 onChange={(e) => handleSelectRole(e.target.value)}
                 className="bg-white text-xs font-semibold text-slate-800 border border-slate-200 rounded px-2 py-1 shadow-2xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
+                <optgroup label="Quản trị hệ thống Đa Lớp">
+                  <option value="super_admin">
+                    👑 Super Admin ({SUPER_ADMIN_EMAIL})
+                  </option>
+                </optgroup>
                 <optgroup label="Cán bộ lớp mặc định">
                   <option value="teacher">🎓 Giáo viên chủ nhiệm (Khóa mã)</option>
                   <option value="team_leader_1">🚩 Tổ trưởng Tổ 1 (Khóa mã)</option>
@@ -184,8 +222,20 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               </select>
             </div>
 
-            {/* Manage Access Codes Button (Chỉ GVCN) */}
-            {currentUser.role === 'teacher' && (
+            {/* Multi-Class & Officers Center Button (Super Admin & GVCN) */}
+            {isSuperOrTeacher && onOpenSuperAdminModal && (
+              <button
+                onClick={onOpenSuperAdminModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-xs font-bold transition-colors shadow-2xs"
+                title="Quản lý đa lớp chủ nhiệm & Phân quyền Ban cán sự lớp"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden sm:inline">Đa Lớp & Ban Cán Sự</span>
+              </button>
+            )}
+
+            {/* Manage Access Codes Button (Super Admin & GVCN) */}
+            {isSuperOrTeacher && (
               <button
                 onClick={onOpenManageAccessCodes}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-xs font-semibold transition-colors"
@@ -201,8 +251,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               </button>
             )}
 
-            {/* Urgent Alerts Bell (GVCN & Ban cán sự) */}
-            {(currentUser.role === 'teacher' || currentUser.role === 'class_monitor') && (
+            {/* Urgent Alerts Bell (Super Admin, GVCN & Ban cán sự) */}
+            {(isSuperOrTeacher || currentUser.role === 'class_monitor') && (
               <button
                 onClick={onOpenAlerts}
                 className="relative p-2 rounded-lg text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
@@ -217,8 +267,8 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
               </button>
             )}
 
-            {/* Config & Backup Buttons (Chỉ GVCN) */}
-            {currentUser.role === 'teacher' && (
+            {/* Config & Backup Buttons (Super Admin & GVCN) */}
+            {isSuperOrTeacher && (
               <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
                 <button
                   onClick={onOpenCriteriaConfig}
@@ -348,16 +398,24 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
       {/* Role Notice Indicator */}
       <div className="bg-slate-50 border-t border-slate-200 px-4 py-1.5 text-xs text-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
-          <span className={`font-semibold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded ${
-            currentUser.role === 'delegated'
-              ? 'bg-purple-100 text-purple-900'
-              : currentUser.role === 'teacher'
-              ? 'bg-indigo-100 text-indigo-900'
-              : currentUser.role === 'student'
-              ? 'bg-slate-200 text-slate-700'
-              : 'bg-blue-100 text-blue-900'
-          }`}>
-            {currentUser.role === 'delegated' ? 'UỶ QUYỀN GVCN:' : 'Đang đăng nhập:'}
+          <span
+            className={`font-semibold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded ${
+              currentUser.role === 'super_admin'
+                ? 'bg-amber-200 text-amber-950 font-black'
+                : currentUser.role === 'delegated'
+                ? 'bg-purple-100 text-purple-900'
+                : currentUser.role === 'teacher'
+                ? 'bg-indigo-100 text-indigo-900'
+                : currentUser.role === 'student'
+                ? 'bg-slate-200 text-slate-700'
+                : 'bg-blue-100 text-blue-900'
+            }`}
+          >
+            {currentUser.role === 'super_admin'
+              ? '👑 SUPER ADMIN:'
+              : currentUser.role === 'delegated'
+              ? 'UỶ QUYỀN GVCN:'
+              : 'Đang đăng nhập:'}
           </span>
           <span className="font-bold text-slate-900">
             {currentUser.title} — {currentUser.name}
@@ -382,20 +440,38 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           )}
 
           <div className="ml-auto flex items-center gap-3">
-            {currentUser.role !== 'teacher' ? (
-              <button
-                onClick={() => onRequestRoleChange('teacher')}
-                className="underline font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-              >
-                Đăng nhập quyền GVCN <ChevronRight className="w-3 h-3" />
-              </button>
+            {!isSuperOrTeacher ? (
+              <>
+                <button
+                  onClick={() => onRequestRoleChange('super_admin')}
+                  className="underline font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1"
+                >
+                  <Crown className="w-3 h-3" /> Super Admin
+                </button>
+                <button
+                  onClick={() => onRequestRoleChange('teacher')}
+                  className="underline font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                >
+                  Đăng nhập GVCN <ChevronRight className="w-3 h-3" />
+                </button>
+              </>
             ) : (
-              <button
-                onClick={onOpenManageAccessCodes}
-                className="font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-              >
-                <KeyRound className="w-3 h-3" /> Phân quyền & Uỷ quyền
-              </button>
+              <>
+                {onOpenSuperAdminModal && (
+                  <button
+                    onClick={onOpenSuperAdminModal}
+                    className="font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1"
+                  >
+                    <Crown className="w-3 h-3" /> Quản lý Đa Lớp & BCS
+                  </button>
+                )}
+                <button
+                  onClick={onOpenManageAccessCodes}
+                  className="font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                >
+                  <KeyRound className="w-3 h-3" /> Phân quyền & Uỷ quyền
+                </button>
+              </>
             )}
 
             <button
@@ -418,3 +494,4 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
     </header>
   );
 };
+

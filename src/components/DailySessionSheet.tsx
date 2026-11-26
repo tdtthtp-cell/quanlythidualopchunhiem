@@ -51,20 +51,23 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
   onDeleteLog,
   onOpenNotificationModal,
 }) => {
-  // Permission check: Teacher, Class Officers, and Delegated Users with appropriate rights
+  // Permission check: Super Admin, Teacher, Class Officers, and Delegated Users with appropriate rights
   const canAddLogs =
+    currentUser.role === 'super_admin' ||
     currentUser.role === 'teacher' ||
     currentUser.role === 'team_leader' ||
     currentUser.role === 'class_monitor' ||
     (currentUser.role === 'delegated' && !!currentUser.delegatedPermissions?.canLogDaily);
 
   const canEditLogs =
+    currentUser.role === 'super_admin' ||
     currentUser.role === 'teacher' ||
     currentUser.role === 'team_leader' ||
     currentUser.role === 'class_monitor' ||
     (currentUser.role === 'delegated' && !!currentUser.delegatedPermissions?.canEditLogs);
 
   const canDeleteLogs =
+    currentUser.role === 'super_admin' ||
     currentUser.role === 'teacher' ||
     currentUser.role === 'team_leader' ||
     currentUser.role === 'class_monitor' ||

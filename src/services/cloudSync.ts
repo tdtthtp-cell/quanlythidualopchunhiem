@@ -19,6 +19,7 @@ import {
   NotificationRecord,
   DelegatedUser,
   ScheduledActivity,
+  HomeroomClass,
 } from '../types';
 import { DEFAULT_CRITERIA_CATEGORIES, DEFAULT_CRITERIA_ITEMS } from '../data/defaultCriteria';
 import { DEFAULT_STUDENTS } from '../data/defaultStudents';
@@ -31,6 +32,7 @@ import {
   DEFAULT_ACCESS_CODES,
   DEFAULT_DELEGATED_USERS,
   DEFAULT_SCHEDULED_ACTIVITIES,
+  DEFAULT_HOMEROOM_CLASSES,
 } from '../utils/storage';
 
 // Collection and Document paths
@@ -46,6 +48,7 @@ const PATHS = {
   NOTIFICATIONS: 'notifications',
   DELEGATED_USERS: 'delegated_users',
   SCHEDULED_ACTIVITIES: 'scheduled_activities',
+  HOMEROOM_CLASSES: 'homeroom_classes',
 };
 
 // Check and seed initial data if Firestore database is empty
@@ -99,6 +102,11 @@ export async function initializeCloudDatabaseIfNeeded() {
         batch.set(doc(db, PATHS.SCHEDULED_ACTIVITIES, sa.id), sa);
       }
 
+      // Seed Homeroom Classes
+      for (const hc of DEFAULT_HOMEROOM_CLASSES) {
+        batch.set(doc(db, PATHS.HOMEROOM_CLASSES, hc.id), hc);
+      }
+
       await batch.commit();
       console.log('Initial class data successfully seeded to Cloud Firestore!');
     } else {
@@ -119,6 +127,17 @@ export async function initializeCloudDatabaseIfNeeded() {
           const b = writeBatch(db);
           for (const sa of DEFAULT_SCHEDULED_ACTIVITIES) {
             b.set(doc(db, PATHS.SCHEDULED_ACTIVITIES, sa.id), sa);
+          }
+          b.commit().catch(console.error);
+        }
+      }).catch(console.error);
+
+      // Check if homeroom classes need initial seed
+      getDocs(collection(db, PATHS.HOMEROOM_CLASSES)).then((clsSnap) => {
+        if (clsSnap.empty) {
+          const b = writeBatch(db);
+          for (const hc of DEFAULT_HOMEROOM_CLASSES) {
+            b.set(doc(db, PATHS.HOMEROOM_CLASSES, hc.id), hc);
           }
           b.commit().catch(console.error);
         }
@@ -415,4 +434,30 @@ export async function cloudBatchSaveScheduledActivities(activities: ScheduledAct
     batch.set(doc(db, PATHS.SCHEDULED_ACTIVITIES, act.id), act);
   }
   await batch.commit();
+}
+
+// Subscribe to Realtime Homeroom Classes (Multi-class management)
+export function subscribeToHomeroomClasses(callback: (classes: HomeroomClass[]) => void) {
+  return onSnapshot(
+    collection(db, PATHS.HOMEROOM_CLASSES),
+    (snapshot) => {
+      const list: HomeroomClass[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as HomeroomClass);
+      });
+      list.sort((a, b) => a.className.localeCompare(b.className));
+      callback(list);
+    },
+    (err) => {
+      console.warn('Realtime homeroom classes sync fallback:', err);
+    }
+  );
+}
+
+export async function cloudSaveHomeroomClass(cls: HomeroomClass) {
+  await setDoc(doc(db, PATHS.HOMEROOM_CLASSES, cls.id), cls);
+}
+
+export async function cloudDeleteHomeroomClass(classId: string) {
+  await deleteDoc(doc(db, PATHS.HOMEROOM_CLASSES, classId));
 }

@@ -45,8 +45,9 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
   onBatchDeleteStudents,
   onBatchImportStudents,
 }) => {
-  // Only Teacher has permission to add, edit, or delete students
-  const isTeacher = currentUser.role === 'teacher';
+  // Only Super Admin or Teacher has permission to add, edit, or delete students
+  const isTeacher =
+    currentUser.role === 'super_admin' || currentUser.role === 'teacher';
   const [selectedGroup, setSelectedGroup] = useState<GroupNumber | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

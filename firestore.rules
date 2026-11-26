@@ -59,5 +59,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(activityId);
     }
+
+    // Homeroom classes (Multi-class management)
+    match /homeroom_classes/{classId} {
+      allow read: if true;
+      allow write: if isValidId(classId);
+    }
   }
 }

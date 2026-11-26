@@ -179,6 +179,25 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "title", "frequency", "category", "status"]
+    },
+    "HomeroomClass": {
+      "title": "HomeroomClass",
+      "description": "Thông tin lớp chủ nhiệm trong hệ thống đa lớp của Super Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "className": { "type": "string" },
+        "grade": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "schoolName": { "type": "string" },
+        "homeroomTeacher": { "type": "string" },
+        "teacherEmail": { "type": "string" },
+        "teacherPhone": { "type": "string" },
+        "studentCount": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "className", "homeroomTeacher", "isActive"]
     }
   },
   "firestore": {
@@ -221,6 +240,10 @@
     "/scheduled_activities/{activityId}": {
       "schema": "ScheduledActivity",
       "description": "Lịch hoạt động lớp hằng ngày, tuần, tháng và nhắc việc"
+    },
+    "/homeroom_classes/{classId}": {
+      "schema": "HomeroomClass",
+      "description": "Danh sách các lớp chủ nhiệm trong hệ thống đa lớp"
     }
   }
 }

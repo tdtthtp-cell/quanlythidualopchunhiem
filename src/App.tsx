@@ -13,6 +13,7 @@ import {
   GroupNumber,
   DelegatedUser,
   ScheduledActivity,
+  HomeroomClass,
 } from './types';
 import {
   loadStoredData,
@@ -20,6 +21,7 @@ import {
   DEFAULT_ACCESS_CODES,
   DEFAULT_DELEGATED_USERS,
   DEFAULT_SCHEDULED_ACTIVITIES,
+  DEFAULT_HOMEROOM_CLASSES,
 } from './utils/storage';
 import {
   calculateStudentWeeklyScores,
@@ -37,6 +39,7 @@ import {
   subscribeToNotifications,
   subscribeToDelegatedUsers,
   subscribeToScheduledActivities,
+  subscribeToHomeroomClasses,
   cloudSaveStudent,
   cloudDeleteStudent,
   cloudBatchDeleteStudents,
@@ -54,7 +57,10 @@ import {
   cloudDeleteDelegatedUser,
   cloudSaveScheduledActivity,
   cloudDeleteScheduledActivity,
+  cloudSaveHomeroomClass,
+  cloudDeleteHomeroomClass,
 } from './services/cloudSync';
+import { auth, onAuthStateChanged, SUPER_ADMIN_EMAIL } from './firebase';
 import { HeaderNav } from './components/HeaderNav';
 import { DashboardOverview } from './components/DashboardOverview';
 import { DailySessionSheet } from './components/DailySessionSheet';
@@ -68,6 +74,7 @@ import { BackupSyncModal } from './components/BackupSyncModal';
 import { AccessCodeAuthModal, PendingRoleAuth } from './components/AccessCodeAuthModal';
 import { ManageAccessCodesModal } from './components/ManageAccessCodesModal';
 import { ActivityScheduleManager } from './components/ActivityScheduleManager';
+import { SuperAdminMultiClassModal } from './components/SuperAdminMultiClassModal';
 
 export default function App() {
   // Load initial data from localStorage for instant boot
@@ -85,6 +92,9 @@ export default function App() {
   const [scheduledActivities, setScheduledActivities] = useState<ScheduledActivity[]>(
     initial.scheduledActivities || DEFAULT_SCHEDULED_ACTIVITIES
   );
+  const [homeroomClasses, setHomeroomClasses] = useState<HomeroomClass[]>(
+    initial.homeroomClasses || DEFAULT_HOMEROOM_CLASSES
+  );
 
   // App navigation and current role: Mặc định mở ứng dụng là khoá phân quyền
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -98,6 +108,7 @@ export default function App() {
   // Role Authentication states
   const [pendingAuth, setPendingAuth] = useState<PendingRoleAuth | null>(null);
   const [isManageCodesOpen, setIsManageCodesOpen] = useState(false);
+  const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState(false);
 
   // Other Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -110,6 +121,23 @@ export default function App() {
   useEffect(() => {
     // Check and seed initial data if Firestore database is empty
     initializeCloudDatabaseIfNeeded();
+
+    // Listen to Firebase Google Auth state for Super Admin (tdtt.htp@gmail.com)
+    const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (
+        firebaseUser &&
+        firebaseUser.email &&
+        firebaseUser.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
+      ) {
+        setCurrentUser({
+          role: 'super_admin',
+          name: firebaseUser.displayName || 'Super Admin (HTP)',
+          email: SUPER_ADMIN_EMAIL,
+          groupAccess: 'all',
+          title: `Super Admin Hệ Thống (${SUPER_ADMIN_EMAIL})`,
+        });
+      }
+    });
 
     // Setup real-time listeners for all collections
     const unsubStudents = subscribeToStudents((cloudStudents) => {
@@ -176,7 +204,15 @@ export default function App() {
       }
     });
 
+    const unsubHomeroomClasses = subscribeToHomeroomClasses((cloudClasses) => {
+      if (cloudClasses && cloudClasses.length > 0) {
+        setHomeroomClasses(cloudClasses);
+        saveToStorage('HOMEROOM_CLASSES', cloudClasses);
+      }
+    });
+
     return () => {
+      unsubAuth();
       unsubStudents();
       unsubLogs();
       unsubAdjustments();
@@ -187,6 +223,7 @@ export default function App() {
       unsubNotifications();
       unsubDelegated();
       unsubScheduled();
+      unsubHomeroomClasses();
     };
   }, []);
 
@@ -225,7 +262,15 @@ export default function App() {
 
   // Role authentication request handler
   const handleRequestRoleChange = (roleValue: string) => {
-    if (roleValue === 'teacher') {
+    if (roleValue === 'super_admin') {
+      setPendingAuth({
+        role: 'super_admin',
+        groupAccess: 'all',
+        name: `Tài khoản: ${SUPER_ADMIN_EMAIL}`,
+        title: 'Super Admin Quản Trị Đa Lớp & Phân Quyền Ban Cán Sự',
+        email: SUPER_ADMIN_EMAIL,
+      });
+    } else if (roleValue === 'teacher') {
       setPendingAuth({
         role: 'teacher',
         groupAccess: 'all',
@@ -278,12 +323,66 @@ export default function App() {
     setCurrentUser({
       role: roleAuth.role,
       name: roleAuth.name,
+      email: roleAuth.email,
       groupAccess: roleAuth.groupAccess,
       title: roleAuth.title,
       delegatedPermissions: roleAuth.delegatedPermissions,
       delegatedUserId: roleAuth.delegatedUserId,
     });
     setPendingAuth(null);
+  };
+
+  // Multi-Class Homeroom handlers
+  const handleSaveHomeroomClass = (item: HomeroomClass) => {
+    setHomeroomClasses((prev) => {
+      const exists = prev.some((c) => c.id === item.id);
+      const updated = exists
+        ? prev.map((c) => (c.id === item.id ? item : c))
+        : [item, ...prev];
+      saveToStorage('HOMEROOM_CLASSES', updated);
+      return updated;
+    });
+    cloudSaveHomeroomClass(item).catch(console.error);
+
+    // If the modified class is currently active, sync its config & accessCodes too
+    if (item.className === config.className) {
+      const nextCodes: AccessCodesConfig = {
+        ...item.accessCodes,
+      };
+      setAccessCodes(nextCodes);
+      cloudSaveAccessCodes(nextCodes).catch(console.error);
+    }
+  };
+
+  const handleDeleteHomeroomClass = (classId: string) => {
+    setHomeroomClasses((prev) => {
+      const updated = prev.filter((c) => c.id !== classId);
+      saveToStorage('HOMEROOM_CLASSES', updated);
+      return updated;
+    });
+    cloudDeleteHomeroomClass(classId).catch(console.error);
+  };
+
+  const handleSwitchHomeroomClass = (item: HomeroomClass) => {
+    const updatedConfig: ClassConfig = {
+      ...config,
+      className: item.className,
+      schoolName: item.schoolName,
+      academicYear: item.academicYear,
+      homeroomTeacher: item.homeroomTeacher,
+      teacherEmail: item.teacherEmail,
+      teacherPhone: item.teacherPhone,
+    };
+    setConfig(updatedConfig);
+    saveToStorage('CONFIG', updatedConfig);
+    cloudSaveClassConfig(updatedConfig).catch(console.error);
+
+    const updatedCodes: AccessCodesConfig = {
+      ...item.accessCodes,
+    };
+    setAccessCodes(updatedCodes);
+    saveToStorage('ACCESS_CODES', updatedCodes);
+    cloudSaveAccessCodes(updatedCodes).catch(console.error);
   };
 
   // Delegated Users handlers
@@ -516,6 +615,8 @@ export default function App() {
         onOpenStudentMgmt={() => setActiveTab('students')}
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenManageAccessCodes={() => setIsManageCodesOpen(true)}
+        onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
+        homeroomClasses={homeroomClasses}
         studentCount={students.length}
         delegatedUsers={delegatedUsers}
         pendingScheduleCount={pendingScheduleCount}
@@ -642,7 +743,30 @@ export default function App() {
         />
       )}
 
-      {/* Manage Access Codes & Delegation Modal (for GVCN) */}
+      {/* Super Admin Multi-Class & Class Officers Center Modal */}
+      <SuperAdminMultiClassModal
+        isOpen={isSuperAdminModalOpen}
+        onClose={() => setIsSuperAdminModalOpen(false)}
+        homeroomClasses={homeroomClasses}
+        currentConfig={config}
+        currentAccessCodes={accessCodes}
+        students={students}
+        currentUser={currentUser}
+        onSaveHomeroomClass={handleSaveHomeroomClass}
+        onDeleteHomeroomClass={handleDeleteHomeroomClass}
+        onSwitchHomeroomClass={handleSwitchHomeroomClass}
+        onUpdateStudentRole={(studentId, newRole) => {
+          const st = students.find((s) => s.id === studentId);
+          if (st) {
+            handleUpdateStudent({
+              ...st,
+              role: newRole as Student['role'],
+            });
+          }
+        }}
+      />
+
+      {/* Manage Access Codes & Delegation Modal (for GVCN & Super Admin) */}
       {isManageCodesOpen && (
         <ManageAccessCodesModal
           accessCodes={accessCodes}

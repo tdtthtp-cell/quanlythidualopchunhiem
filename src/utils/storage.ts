@@ -9,6 +9,7 @@ import {
   AccessCodesConfig,
   DelegatedUser,
   ScheduledActivity,
+  HomeroomClass,
 } from '../types';
 import { DEFAULT_CRITERIA_CATEGORIES, DEFAULT_CRITERIA_ITEMS } from '../data/defaultCriteria';
 import { DEFAULT_STUDENTS } from '../data/defaultStudents';
@@ -279,6 +280,102 @@ export const DEFAULT_SCHEDULED_ACTIVITIES: ScheduledActivity[] = [
   },
 ];
 
+export const DEFAULT_HOMEROOM_CLASSES: HomeroomClass[] = [
+  {
+    id: 'class_10a3',
+    className: 'Lớp 10A3',
+    grade: '10',
+    academicYear: '2026 - 2027',
+    schoolName: 'Trường THPT Huỳnh Tấn Phát',
+    homeroomTeacher: 'Bồ Công Lâm',
+    teacherEmail: 'tdtt.htp@gmail.com',
+    teacherPhone: '09845119015',
+    accessCodes: {
+      teacher: 'CN230876',
+      team1: 'TO1_2025',
+      team2: 'TO2_2025',
+      team3: 'TO3_2025',
+      team4: 'TO4_2025',
+      monitor: 'BCS_2025',
+    },
+    officers: {
+      monitorName: 'Nguyễn Minh Khôi',
+      viceAcademicName: 'Trần Ngọc Bảo Trân',
+      viceLaborName: 'Lê Hoàng Nam',
+      redFlagName: 'Phạm Gia Huy',
+      team1LeaderName: 'Đặng Tuấn Kiệt',
+      team2LeaderName: 'Võ Thị Mỹ Duyên',
+      team3LeaderName: 'Bùi Quốc Bảo',
+      team4LeaderName: 'Ngô Thanh Thảo',
+    },
+    studentCount: 36,
+    isActive: true,
+    createdAt: '2026-09-05T07:00:00.000Z',
+  },
+  {
+    id: 'class_10a1',
+    className: 'Lớp 10A1',
+    grade: '10',
+    academicYear: '2026 - 2027',
+    schoolName: 'Trường THPT Huỳnh Tấn Phát',
+    homeroomTeacher: 'Trần Minh Đức',
+    teacherEmail: 'duc.tm@huynhtanphat.edu.vn',
+    teacherPhone: '0912345678',
+    accessCodes: {
+      teacher: 'CN_10A1',
+      team1: 'TO1_10A1',
+      team2: 'TO2_10A1',
+      team3: 'TO3_10A1',
+      team4: 'TO4_10A1',
+      monitor: 'BCS_10A1',
+    },
+    officers: {
+      monitorName: 'Lê Quang Vinh',
+      viceAcademicName: 'Nguyễn Hà Phương',
+      viceLaborName: 'Trần Quốc Khánh',
+      redFlagName: 'Hoàng Minh Anh',
+      team1LeaderName: 'Phan Thanh Tùng',
+      team2LeaderName: 'Vũ Ngọc Mai',
+      team3LeaderName: 'Đỗ Hoàng Long',
+      team4LeaderName: 'Huỳnh Thảo Vy',
+    },
+    studentCount: 42,
+    isActive: true,
+    createdAt: '2026-09-05T07:10:00.000Z',
+  },
+  {
+    id: 'class_11a2',
+    className: 'Lớp 11A2',
+    grade: '11',
+    academicYear: '2026 - 2027',
+    schoolName: 'Trường THPT Huỳnh Tấn Phát',
+    homeroomTeacher: 'Lê Thị Thu Hằng',
+    teacherEmail: 'hang.ltt@huynhtanphat.edu.vn',
+    teacherPhone: '0987654321',
+    accessCodes: {
+      teacher: 'CN_11A2',
+      team1: 'TO1_11A2',
+      team2: 'TO2_11A2',
+      team3: 'TO3_11A2',
+      team4: 'TO4_11A2',
+      monitor: 'BCS_11A2',
+    },
+    officers: {
+      monitorName: 'Phạm Minh Quân',
+      viceAcademicName: 'Đinh Ngọc Ánh',
+      viceLaborName: 'Nguyễn Tiến Đạt',
+      redFlagName: 'Lý Bảo Ngọc',
+      team1LeaderName: 'Trương Gia Bảo',
+      team2LeaderName: 'Hồ Thanh Trúc',
+      team3LeaderName: 'Châu Minh Hiếu',
+      team4LeaderName: 'Dương Khánh Linh',
+    },
+    studentCount: 40,
+    isActive: true,
+    createdAt: '2026-09-05T07:20:00.000Z',
+  },
+];
+
 const STORAGE_KEYS = {
   STUDENTS: 'thidua_students_v1',
   CATEGORIES: 'thidua_categories_v1',
@@ -290,6 +387,7 @@ const STORAGE_KEYS = {
   ACCESS_CODES: 'thidua_access_codes_v1',
   DELEGATED_USERS: 'thidua_delegated_users_v1',
   SCHEDULED_ACTIVITIES: 'thidua_scheduled_activities_v1',
+  HOMEROOM_CLASSES: 'thidua_homeroom_classes_v1',
 };
 
 export function loadStoredData() {
@@ -304,6 +402,7 @@ export function loadStoredData() {
     const accessCodes = localStorage.getItem(STORAGE_KEYS.ACCESS_CODES);
     const delegatedUsers = localStorage.getItem(STORAGE_KEYS.DELEGATED_USERS);
     const scheduledActivities = localStorage.getItem(STORAGE_KEYS.SCHEDULED_ACTIVITIES);
+    const homeroomClasses = localStorage.getItem(STORAGE_KEYS.HOMEROOM_CLASSES);
 
     let parsedAccessCodes = accessCodes
       ? (JSON.parse(accessCodes) as AccessCodesConfig)
@@ -335,6 +434,9 @@ export function loadStoredData() {
       scheduledActivities: scheduledActivities
         ? (JSON.parse(scheduledActivities) as ScheduledActivity[])
         : DEFAULT_SCHEDULED_ACTIVITIES,
+      homeroomClasses: homeroomClasses
+        ? (JSON.parse(homeroomClasses) as HomeroomClass[])
+        : DEFAULT_HOMEROOM_CLASSES,
     };
   } catch (err) {
     console.error('Error loading data from localStorage, fallback to defaults:', err);
@@ -349,6 +451,7 @@ export function loadStoredData() {
       accessCodes: DEFAULT_ACCESS_CODES,
       delegatedUsers: DEFAULT_DELEGATED_USERS,
       scheduledActivities: DEFAULT_SCHEDULED_ACTIVITIES,
+      homeroomClasses: DEFAULT_HOMEROOM_CLASSES,
     };
   }
 }
@@ -390,5 +493,6 @@ export function resetAllToDefaults() {
     accessCodes: DEFAULT_ACCESS_CODES,
     delegatedUsers: DEFAULT_DELEGATED_USERS,
     scheduledActivities: DEFAULT_SCHEDULED_ACTIVITIES,
+    homeroomClasses: DEFAULT_HOMEROOM_CLASSES,
   };
 }
