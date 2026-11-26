@@ -4,6 +4,7 @@ import {
   Clock,
   Plus,
   Trash2,
+  Edit3,
   Filter,
   CheckCircle2,
   AlertCircle,
@@ -14,6 +15,7 @@ import {
   ShieldAlert,
   ArrowUpDown,
   BookOpen,
+  Lock,
 } from 'lucide-react';
 import {
   Student,
@@ -33,6 +35,7 @@ interface DailySessionSheetProps {
   currentUser: CurrentUser;
   config: ClassConfig;
   onAddLog: (log: Omit<DailyLogEntry, 'id' | 'createdAt'>) => void;
+  onUpdateLog?: (log: DailyLogEntry) => void;
   onDeleteLog: (id: string) => void;
   onOpenNotificationModal?: (studentId: string, violationNote: string) => void;
 }
@@ -44,25 +47,49 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
   currentUser,
   config,
   onAddLog,
+  onUpdateLog,
   onDeleteLog,
   onOpenNotificationModal,
 }) => {
+  // Permission check: Teacher, Class Officers, and Delegated Users with appropriate rights
+  const canAddLogs =
+    currentUser.role === 'teacher' ||
+    currentUser.role === 'team_leader' ||
+    currentUser.role === 'class_monitor' ||
+    (currentUser.role === 'delegated' && !!currentUser.delegatedPermissions?.canLogDaily);
+
+  const canEditLogs =
+    currentUser.role === 'teacher' ||
+    currentUser.role === 'team_leader' ||
+    currentUser.role === 'class_monitor' ||
+    (currentUser.role === 'delegated' && !!currentUser.delegatedPermissions?.canEditLogs);
+
+  const canDeleteLogs =
+    currentUser.role === 'teacher' ||
+    currentUser.role === 'team_leader' ||
+    currentUser.role === 'class_monitor' ||
+    (currentUser.role === 'delegated' && !!currentUser.delegatedPermissions?.canDeleteLogs);
+
+  const canManageLogs = canAddLogs || canEditLogs || canDeleteLogs;
+
   // View mode: 'day' | 'week' | 'month'
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>('Monday');
   const [selectedSession, setSelectedSession] = useState<'all' | 'morning' | 'afternoon'>('all');
   const [selectedGroup, setSelectedGroup] = useState<GroupNumber | 'all'>(
-    currentUser.role === 'team_leader' && currentUser.groupAccess && currentUser.groupAccess !== 'all'
+    (currentUser.role === 'team_leader' || currentUser.role === 'delegated') &&
+      currentUser.groupAccess &&
+      currentUser.groupAccess !== 'all'
       ? currentUser.groupAccess
       : 'all'
   );
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modal state
+  // Add Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalType, setModalType] = useState<'deduction' | 'praise'>('deduction');
 
-  // Form state
+  // Add Form state
   const [formGroup, setFormGroup] = useState<GroupNumber | 'all'>('all');
   const [formStudentId, setFormStudentId] = useState('');
   const [formCriteriaId, setFormCriteriaId] = useState('');
@@ -71,6 +98,17 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
   const [formDay, setFormDay] = useState<DayOfWeek>('Monday');
   const [formDate, setFormDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formNote, setFormNote] = useState('');
+
+  // Edit Modal state for class officers & teacher
+  const [editingLog, setEditingLog] = useState<DailyLogEntry | null>(null);
+  const [editGroup, setEditGroup] = useState<GroupNumber | 'all'>('all');
+  const [editStudentId, setEditStudentId] = useState('');
+  const [editCriteriaId, setEditCriteriaId] = useState('');
+  const [editSession, setEditSession] = useState<'morning' | 'afternoon'>('morning');
+  const [editPeriod, setEditPeriod] = useState<number>(1);
+  const [editDay, setEditDay] = useState<DayOfWeek>('Monday');
+  const [editDate, setEditDate] = useState<string>('');
+  const [editNote, setEditNote] = useState('');
 
   const daysList: { id: DayOfWeek; label: string }[] = [
     { id: 'Monday', label: 'Thứ Hai' },
@@ -190,6 +228,54 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
     }
   };
 
+  // Open Edit Modal handler (for class officers & teacher)
+  const handleOpenEdit = (log: DailyLogEntry) => {
+    setEditingLog(log);
+    setEditGroup(log.group);
+    setEditStudentId(log.studentId);
+    setEditCriteriaId(log.criteriaId);
+    setEditSession(log.session);
+    setEditPeriod(log.period);
+    setEditDay(log.dayOfWeek);
+    setEditDate(log.date || new Date().toISOString().slice(0, 10));
+    setEditNote(log.note || '');
+  };
+
+  const handleSaveEditLog = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLog) return;
+    const st = students.find((s) => s.id === editStudentId);
+    const cr = criteria.find((c) => c.id === editCriteriaId);
+    if (!st || !cr) return;
+
+    const updated: DailyLogEntry = {
+      ...editingLog,
+      studentId: st.id,
+      studentName: st.fullName,
+      group: st.group,
+      date: editDate,
+      dayOfWeek: editDay,
+      session: editSession,
+      period: Number(editPeriod),
+      criteriaId: cr.id,
+      criteriaName: cr.codeName,
+      category: cr.category,
+      delta: cr.delta,
+      note: editNote.trim(),
+      loggedByName: currentUser.name,
+      loggedByRole: `${currentUser.title} (Cập nhật)`,
+    };
+
+    onUpdateLog?.(updated);
+    setEditingLog(null);
+  };
+
+  // Filter students for edit modal dropdown by editGroup
+  const editModalStudents = useMemo(() => {
+    if (editGroup === 'all') return students;
+    return students.filter((s) => s.group === editGroup);
+  }, [students, editGroup]);
+
   return (
     <div className="space-y-5">
       {/* Top Header Card */}
@@ -203,27 +289,34 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
               </h2>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Phân chia theo 4 tổ. Cán bộ tổ và GVCN ghi nhận vi phạm và biểu dương việc tốt theo tiết học thực tế.
+              Phân chia theo 4 tổ. Cán bộ tổ và GVCN xem, thêm, sửa, xoá vi phạm và biểu dương việc tốt theo tiết học thực tế.
             </p>
           </div>
 
-          {/* Action Buttons: Add Violation / Add Praise */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => handleOpenModal('praise')}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              + Tuyên dương việc tốt
-            </button>
-            <button
-              onClick={() => handleOpenModal('deduction')}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              - Ghi nhận vi phạm
-            </button>
-          </div>
+          {/* Action Buttons: Add Violation / Add Praise (Chỉ người có quyền ghi nhận) */}
+          {canAddLogs ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => handleOpenModal('praise')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                + Tuyên dương việc tốt
+              </button>
+              <button
+                onClick={() => handleOpenModal('deduction')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                - Ghi nhận vi phạm
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-medium border border-slate-200">
+              <Lock className="w-3.5 h-3.5 text-slate-400" />
+              <span>Chế độ tra cứu (Chỉ cán bộ lớp & người được phân quyền mới có thể ghi điểm)</span>
+            </div>
+          )}
         </div>
 
         {/* View Mode & Day Tabs */}
@@ -390,7 +483,7 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
                   <th className="py-3 px-4 text-center">Điểm +/-</th>
                   <th className="py-3 px-4">Nội Dung Chi Tiết / Ghi Chú</th>
                   <th className="py-3 px-4">Người Ghi Nhận</th>
-                  <th className="py-3 px-4 text-right">Thao Tác</th>
+                  {(canEditLogs || canDeleteLogs) && <th className="py-3 px-4 text-right">Thao Tác</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -471,20 +564,33 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
                         <div className="text-[10px] text-slate-400">{log.loggedByRole}</div>
                       </td>
 
-                      {/* Thao tác */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            if (confirm(`Bạn có chắc muốn xoá mục ghi nhận này của học sinh "${log.studentName}" không?`)) {
-                              onDeleteLog(log.id);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Xoá mục này"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+                      {/* Thao tác (Chỉ người có quyền sửa hoặc xóa) */}
+                      {(canEditLogs || canDeleteLogs) && (
+                        <td className="py-3 px-4 text-right whitespace-nowrap space-x-1">
+                          {canEditLogs && (
+                            <button
+                              onClick={() => handleOpenEdit(log)}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Sửa mục ghi nhận này"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {canDeleteLogs && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Bạn có chắc muốn xoá mục ghi nhận này của học sinh "${log.studentName}" không?`)) {
+                                  onDeleteLog(log.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Xoá mục này"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -672,6 +778,182 @@ export const DailySessionSheet: React.FC<DailySessionSheetProps> = ({
                   }`}
                 >
                   Xác nhận lưu
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SỬA MỤC GHI NHẬN NHẬT KÝ (Cán bộ lớp & GVCN) */}
+      {editingLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                  Sửa Mục Ghi Nhận Nhật Ký
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingLog(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditLog} className="space-y-4 text-xs">
+              {/* Lọc Tổ */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Tổ:</label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditGroup('all');
+                      const first = students[0];
+                      if (first) setEditStudentId(first.id);
+                    }}
+                    className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-colors ${
+                      editGroup === 'all'
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Tất cả
+                  </button>
+                  {([1, 2, 3, 4] as GroupNumber[]).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => {
+                        setEditGroup(g);
+                        const firstInGroup = students.find((s) => s.group === g);
+                        if (firstInGroup) setEditStudentId(firstInGroup.id);
+                      }}
+                      className={`py-1.5 px-2 rounded-lg font-semibold text-center border transition-colors ${
+                        editGroup === g
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      Tổ {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chọn học sinh */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Học sinh:</label>
+                <select
+                  value={editStudentId}
+                  onChange={(e) => setEditStudentId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500 font-medium"
+                  required
+                >
+                  {editModalStudents.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.fullName} ({s.code} - Tổ {s.group} - {s.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Chọn tiêu chí */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Tiêu chí chấm điểm ({editingLog.delta > 0 ? 'Tuyên dương' : 'Vi phạm'}):
+                </label>
+                <select
+                  value={editCriteriaId}
+                  onChange={(e) => setEditCriteriaId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500 font-medium"
+                  required
+                >
+                  {criteria
+                    .filter((c) => (editingLog.delta > 0 ? c.delta > 0 : c.delta < 0))
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.codeName} ({c.delta > 0 ? `+${c.delta}` : c.delta}đ) • {c.category}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Ngày, buổi, tiết học */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Thứ:</label>
+                  <select
+                    value={editDay}
+                    onChange={(e) => setEditDay(e.target.value as DayOfWeek)}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {daysList.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Buổi học:</label>
+                  <select
+                    value={editSession}
+                    onChange={(e) => setEditSession(e.target.value as 'morning' | 'afternoon')}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="morning">Buổi sáng</option>
+                    <option value="afternoon">Buổi chiều</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tiết (1-5):</label>
+                  <select
+                    value={editPeriod}
+                    onChange={(e) => setEditPeriod(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value={1}>Tiết 1</option>
+                    <option value={2}>Tiết 2</option>
+                    <option value={3}>Tiết 3</option>
+                    <option value={4}>Tiết 4</option>
+                    <option value={5}>Tiết 5</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Ghi chú */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Ghi chú cụ thể:</label>
+                <textarea
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                  rows={3}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingLog(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-100 font-semibold transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs transition-colors"
+                >
+                  Lưu thay đổi
                 </button>
               </div>
             </form>

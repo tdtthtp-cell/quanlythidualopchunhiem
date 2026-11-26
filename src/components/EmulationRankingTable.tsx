@@ -472,12 +472,12 @@ export const EmulationRankingTable: React.FC<EmulationRankingTableProps> = ({
 
                     {/* Thao tác */}
                     <td className="py-3 px-4 text-right whitespace-nowrap space-x-1">
-                      {/* Sửa điểm thủ công (GVCN) */}
-                      {currentUser.role === 'teacher' && (
+                      {/* Sửa điểm thủ công (GVCN hoặc Người được uỷ quyền chỉnh điểm) */}
+                      {(currentUser.role === 'teacher' || (currentUser.role === 'delegated' && currentUser.delegatedPermissions?.canAdjustScores)) && (
                         <button
                           onClick={() => handleOpenAdjust(item)}
                           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="GVCN chỉnh sửa điểm thủ công"
+                          title="Chỉnh sửa điểm thủ công"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>

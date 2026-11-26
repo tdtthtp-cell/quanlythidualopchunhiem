@@ -135,6 +135,50 @@
         "status": { "type": "string" }
       },
       "required": ["id", "title", "message"]
+    },
+    "DelegatedUser": {
+      "title": "DelegatedUser",
+      "description": "Người dùng được GVCN uỷ quyền truy cập hệ thống",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "title": { "type": "string" },
+        "accessCode": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "delegatedBy": { "type": "string" }
+      },
+      "required": ["id", "name", "title", "accessCode", "isActive"]
+    },
+    "ScheduledActivity": {
+      "title": "ScheduledActivity",
+      "description": "Lịch hoạt động lớp học hằng ngày, hằng tuần, hằng tháng và nhắc việc",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "frequency": { "type": "string" },
+        "category": { "type": "string" },
+        "dayOfWeek": { "type": "string" },
+        "dayOfMonth": { "type": "number" },
+        "month": { "type": "number" },
+        "week": { "type": "number" },
+        "timeSlot": { "type": "string" },
+        "session": { "type": "string" },
+        "assignedScope": { "type": "string" },
+        "assignedGroup": { "type": "number" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "autoRemind": { "type": "boolean" },
+        "lastRemindedAt": { "type": "string" },
+        "reminderCount": { "type": "number" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "frequency", "category", "status"]
     }
   },
   "firestore": {
@@ -169,6 +213,14 @@
     "/notifications/{notificationId}": {
       "schema": "NotificationRecord",
       "description": "Nhật ký gửi thông báo Zalo/Email"
+    },
+    "/delegated_users/{userId}": {
+      "schema": "DelegatedUser",
+      "description": "Danh sách người dùng được GVCN uỷ quyền"
+    },
+    "/scheduled_activities/{activityId}": {
+      "schema": "ScheduledActivity",
+      "description": "Lịch hoạt động lớp hằng ngày, tuần, tháng và nhắc việc"
     }
   }
 }

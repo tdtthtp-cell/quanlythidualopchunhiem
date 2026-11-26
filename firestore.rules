@@ -47,5 +47,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isValidId(notificationId);
     }
+
+    // Delegated users
+    match /delegated_users/{userId} {
+      allow read: if true;
+      allow write: if isValidId(userId);
+    }
+
+    // Scheduled activities
+    match /scheduled_activities/{activityId} {
+      allow read: if true;
+      allow write: if isValidId(activityId);
+    }
   }
 }

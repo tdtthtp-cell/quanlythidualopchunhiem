@@ -16,16 +16,18 @@ import {
   Square,
   MinusSquare,
 } from 'lucide-react';
-import { Student, GroupNumber, StudentRole } from '../types';
+import { Student, GroupNumber, StudentRole, CurrentUser } from '../types';
 import {
   exportStudentsToExcel,
   downloadSampleExcelTemplate,
   parseStudentsFromExcel,
 } from '../utils/excel';
+import { Lock } from 'lucide-react';
 
 interface StudentManagementModalProps {
   students: Student[];
   className: string;
+  currentUser: CurrentUser;
   onAddStudent: (student: Omit<Student, 'id'>) => void;
   onUpdateStudent: (student: Student) => void;
   onDeleteStudent: (id: string) => void;
@@ -36,12 +38,15 @@ interface StudentManagementModalProps {
 export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
   students,
   className,
+  currentUser,
   onAddStudent,
   onUpdateStudent,
   onDeleteStudent,
   onBatchDeleteStudents,
   onBatchImportStudents,
 }) => {
+  // Only Teacher has permission to add, edit, or delete students
+  const isTeacher = currentUser.role === 'teacher';
   const [selectedGroup, setSelectedGroup] = useState<GroupNumber | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -247,44 +252,63 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".xlsx, .xls, .csv"
-              className="hidden"
-            />
-            <button
-              onClick={() => downloadSampleExcelTemplate()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
-              title="Tải file mẫu Excel chuẩn để điền dữ liệu"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Tải Mẫu Excel
-            </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
-              title="Tải file Excel lên để nhập hàng loạt"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Nhập Hàng Loạt Excel
-            </button>
-            <button
-              onClick={() => exportStudentsToExcel(students, className)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
-              title="Xuất toàn bộ danh sách ra Excel"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              Xuất Excel
-            </button>
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
-            >
-              <UserPlus className="w-4 h-4" />
-              + Thêm Học Sinh
-            </button>
+            {isTeacher ? (
+              <>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  accept=".xlsx, .xls, .csv"
+                  className="hidden"
+                />
+                <button
+                  onClick={() => downloadSampleExcelTemplate()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
+                  title="Tải file mẫu Excel chuẩn để điền dữ liệu"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Tải Mẫu Excel
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                  title="Tải file Excel lên để nhập hàng loạt"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Nhập Hàng Loạt Excel
+                </button>
+                <button
+                  onClick={() => exportStudentsToExcel(students, className)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                  title="Xuất toàn bộ danh sách ra Excel"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  Xuất Excel
+                </button>
+                <button
+                  onClick={handleOpenAdd}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  + Thêm Học Sinh
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => exportStudentsToExcel(students, className)}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors"
+                  title="Xuất toàn bộ danh sách ra Excel"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  Xuất Excel
+                </button>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-medium border border-slate-200">
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Chế độ xem danh sách (Chỉ GVCN có quyền thêm, sửa, xoá học sinh)</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -337,8 +361,8 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
               />
             </div>
 
-            {/* Clear all class button */}
-            {students.length > 0 && (
+            {/* Clear all class button (Chỉ GVCN) */}
+            {isTeacher && students.length > 0 && (
               <button
                 onClick={() => handleOpenBatchDelete('all')}
                 className="px-2.5 py-1.5 text-[11px] font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg whitespace-nowrap transition-colors"
@@ -350,8 +374,8 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
           </div>
         </div>
 
-        {/* BATCH ACTION BAR: Appears when 1 or more students are checked */}
-        {selectedIds.length > 0 && (
+        {/* BATCH ACTION BAR: Appears when 1 or more students are checked (Chỉ GVCN) */}
+        {isTeacher && selectedIds.length > 0 && (
           <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-indigo-900 font-semibold">
               <CheckSquare className="w-4 h-4 text-indigo-600" />
@@ -383,23 +407,25 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase tracking-wider">
-                {/* Select All Checkbox */}
-                <th className="py-3 px-3 text-center w-10">
-                  <button
-                    type="button"
-                    onClick={handleToggleSelectAll}
-                    className="text-slate-500 hover:text-indigo-600 flex items-center justify-center mx-auto"
-                    title={isAllFilteredSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả học sinh hiển thị'}
-                  >
-                    {isAllFilteredSelected ? (
-                      <CheckSquare className="w-4 h-4 text-indigo-600" />
-                    ) : isSomeFilteredSelected ? (
-                      <MinusSquare className="w-4 h-4 text-indigo-600" />
-                    ) : (
-                      <Square className="w-4 h-4 text-slate-400" />
-                    )}
-                  </button>
-                </th>
+                {/* Select All Checkbox (Chỉ GVCN) */}
+                {isTeacher && (
+                  <th className="py-3 px-3 text-center w-10">
+                    <button
+                      type="button"
+                      onClick={handleToggleSelectAll}
+                      className="text-slate-500 hover:text-indigo-600 flex items-center justify-center mx-auto"
+                      title={isAllFilteredSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả học sinh hiển thị'}
+                    >
+                      {isAllFilteredSelected ? (
+                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                      ) : isSomeFilteredSelected ? (
+                        <MinusSquare className="w-4 h-4 text-indigo-600" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-400" />
+                      )}
+                    </button>
+                  </th>
+                )}
                 <th className="py-3 px-2 text-center w-10">STT</th>
                 <th className="py-3 px-3">Mã HS</th>
                 <th className="py-3 px-4">Họ và Tên</th>
@@ -409,13 +435,13 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                 <th className="py-3 px-4">Phụ Huynh</th>
                 <th className="py-3 px-3">SĐT Zalo/Liên Lạc</th>
                 <th className="py-3 px-4">Địa Chỉ</th>
-                <th className="py-3 px-4 text-right">Thao Tác</th>
+                {isTeacher && <th className="py-3 px-4 text-right">Thao Tác</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-10 text-center text-slate-400">
+                  <td colSpan={isTeacher ? 11 : 9} className="py-10 text-center text-slate-400">
                     Không có học sinh nào trong danh sách.
                   </td>
                 </tr>
@@ -430,15 +456,17 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                         isChecked ? 'bg-indigo-50/40' : ''
                       }`}
                     >
-                      {/* Row Checkbox */}
-                      <td className="py-3 px-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleStudent(st.id)}
-                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                        />
-                      </td>
+                      {/* Row Checkbox (Chỉ GVCN) */}
+                      {isTeacher && (
+                        <td className="py-3 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleStudent(st.id)}
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                          />
+                        </td>
+                      )}
 
                       <td className="py-3 px-2 text-center text-slate-400 font-medium">{idx + 1}</td>
                       <td className="py-3 px-3 font-semibold text-slate-600">{st.code}</td>
@@ -469,27 +497,29 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                         {st.zaloPhone || st.parentPhone}
                       </td>
                       <td className="py-3 px-4 text-slate-500 max-w-xs truncate">{st.address || '—'}</td>
-                      <td className="py-3 px-4 text-right whitespace-nowrap space-x-1">
-                        <button
-                          onClick={() => handleOpenEdit(st)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="Chỉnh sửa thông tin"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Bạn có chắc muốn xoá học sinh "${st.fullName}" khỏi danh sách lớp không?`)) {
-                              onDeleteStudent(st.id);
-                              setSelectedIds((prev) => prev.filter((id) => id !== st.id));
-                            }
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Xoá học sinh"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+                      {isTeacher && (
+                        <td className="py-3 px-4 text-right whitespace-nowrap space-x-1">
+                          <button
+                            onClick={() => handleOpenEdit(st)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Chỉnh sửa thông tin"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`Bạn có chắc muốn xoá học sinh "${st.fullName}" khỏi danh sách lớp không?`)) {
+                                onDeleteStudent(st.id);
+                                setSelectedIds((prev) => prev.filter((id) => id !== st.id));
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Xoá học sinh"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })

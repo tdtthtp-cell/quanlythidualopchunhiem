@@ -11,11 +11,15 @@ import {
   CurrentUser,
   AccessCodesConfig,
   GroupNumber,
+  DelegatedUser,
+  ScheduledActivity,
 } from './types';
 import {
   loadStoredData,
   saveToStorage,
   DEFAULT_ACCESS_CODES,
+  DEFAULT_DELEGATED_USERS,
+  DEFAULT_SCHEDULED_ACTIVITIES,
 } from './utils/storage';
 import {
   calculateStudentWeeklyScores,
@@ -31,6 +35,8 @@ import {
   subscribeToClassConfig,
   subscribeToAccessCodes,
   subscribeToNotifications,
+  subscribeToDelegatedUsers,
+  subscribeToScheduledActivities,
   cloudSaveStudent,
   cloudDeleteStudent,
   cloudBatchDeleteStudents,
@@ -44,6 +50,10 @@ import {
   cloudSaveCriteriaItems,
   cloudSaveCategories,
   cloudSaveNotification,
+  cloudSaveDelegatedUser,
+  cloudDeleteDelegatedUser,
+  cloudSaveScheduledActivity,
+  cloudDeleteScheduledActivity,
 } from './services/cloudSync';
 import { HeaderNav } from './components/HeaderNav';
 import { DashboardOverview } from './components/DashboardOverview';
@@ -57,6 +67,7 @@ import { ClassSettingsModal } from './components/ClassSettingsModal';
 import { BackupSyncModal } from './components/BackupSyncModal';
 import { AccessCodeAuthModal, PendingRoleAuth } from './components/AccessCodeAuthModal';
 import { ManageAccessCodesModal } from './components/ManageAccessCodesModal';
+import { ActivityScheduleManager } from './components/ActivityScheduleManager';
 
 export default function App() {
   // Load initial data from localStorage for instant boot
@@ -70,6 +81,10 @@ export default function App() {
   const [config, setConfig] = useState<ClassConfig>(initial.config);
   const [notifications, setNotifications] = useState<NotificationRecord[]>(initial.notifications);
   const [accessCodes, setAccessCodes] = useState<AccessCodesConfig>(initial.accessCodes || DEFAULT_ACCESS_CODES);
+  const [delegatedUsers, setDelegatedUsers] = useState<DelegatedUser[]>(initial.delegatedUsers || DEFAULT_DELEGATED_USERS);
+  const [scheduledActivities, setScheduledActivities] = useState<ScheduledActivity[]>(
+    initial.scheduledActivities || DEFAULT_SCHEDULED_ACTIVITIES
+  );
 
   // App navigation and current role: Mặc định mở ứng dụng là khoá phân quyền
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -147,6 +162,20 @@ export default function App() {
       saveToStorage('NOTIFICATIONS', cloudNotifs);
     });
 
+    const unsubDelegated = subscribeToDelegatedUsers((cloudDelegated) => {
+      if (cloudDelegated && cloudDelegated.length > 0) {
+        setDelegatedUsers(cloudDelegated);
+        saveToStorage('DELEGATED_USERS', cloudDelegated);
+      }
+    });
+
+    const unsubScheduled = subscribeToScheduledActivities((cloudScheduled) => {
+      if (cloudScheduled && cloudScheduled.length > 0) {
+        setScheduledActivities(cloudScheduled);
+        saveToStorage('SCHEDULED_ACTIVITIES', cloudScheduled);
+      }
+    });
+
     return () => {
       unsubStudents();
       unsubLogs();
@@ -156,6 +185,8 @@ export default function App() {
       unsubConfig();
       unsubCodes();
       unsubNotifications();
+      unsubDelegated();
+      unsubScheduled();
     };
   }, []);
 
@@ -187,6 +218,11 @@ export default function App() {
     ).length;
   }, [logs, config.currentWeek, config.currentSemester]);
 
+  // Pending scheduled activities count
+  const pendingScheduleCount = useMemo(() => {
+    return scheduledActivities.filter((a) => a.status !== 'completed').length;
+  }, [scheduledActivities]);
+
   // Role authentication request handler
   const handleRequestRoleChange = (roleValue: string) => {
     if (roleValue === 'teacher') {
@@ -215,6 +251,26 @@ export default function App() {
         title: 'Ban cán sự lớp (Theo dõi chung)',
         roleKey: 'monitor',
       });
+    } else if (roleValue === 'delegated_prompt') {
+      setPendingAuth({
+        role: 'delegated',
+        groupAccess: 'all',
+        name: 'Người được uỷ quyền',
+        title: 'Đăng nhập bằng mã uỷ quyền (GVBM, Giám thị...)',
+      });
+    } else if (roleValue.startsWith('delegated_')) {
+      const delId = roleValue.replace('delegated_', '');
+      const matched = delegatedUsers.find((u) => u.id === delId);
+      if (matched) {
+        setPendingAuth({
+          role: 'delegated',
+          groupAccess: matched.permissions.groupScope,
+          name: matched.name,
+          title: `${matched.title} (Uỷ quyền)`,
+          delegatedUserId: matched.id,
+          delegatedPermissions: matched.permissions,
+        });
+      }
     }
   };
 
@@ -224,8 +280,52 @@ export default function App() {
       name: roleAuth.name,
       groupAccess: roleAuth.groupAccess,
       title: roleAuth.title,
+      delegatedPermissions: roleAuth.delegatedPermissions,
+      delegatedUserId: roleAuth.delegatedUserId,
     });
     setPendingAuth(null);
+  };
+
+  // Delegated Users handlers
+  const handleSaveDelegatedUser = (user: DelegatedUser) => {
+    setDelegatedUsers((prev) => {
+      const exists = prev.some((u) => u.id === user.id);
+      const updated = exists ? prev.map((u) => (u.id === user.id ? user : u)) : [user, ...prev];
+      saveToStorage('DELEGATED_USERS', updated);
+      return updated;
+    });
+    cloudSaveDelegatedUser(user).catch(console.error);
+  };
+
+  const handleDeleteDelegatedUser = (userId: string) => {
+    setDelegatedUsers((prev) => {
+      const updated = prev.filter((u) => u.id !== userId);
+      saveToStorage('DELEGATED_USERS', updated);
+      return updated;
+    });
+    cloudDeleteDelegatedUser(userId).catch(console.error);
+  };
+
+  // Scheduled Activities handlers
+  const handleSaveScheduledActivity = (activity: ScheduledActivity) => {
+    setScheduledActivities((prev) => {
+      const exists = prev.some((a) => a.id === activity.id);
+      const updated = exists
+        ? prev.map((a) => (a.id === activity.id ? activity : a))
+        : [activity, ...prev];
+      saveToStorage('SCHEDULED_ACTIVITIES', updated);
+      return updated;
+    });
+    cloudSaveScheduledActivity(activity).catch(console.error);
+  };
+
+  const handleDeleteScheduledActivity = (activityId: string) => {
+    setScheduledActivities((prev) => {
+      const updated = prev.filter((a) => a.id !== activityId);
+      saveToStorage('SCHEDULED_ACTIVITIES', updated);
+      return updated;
+    });
+    cloudDeleteScheduledActivity(activityId).catch(console.error);
   };
 
   // Handlers for Logs (Synced to Cloud)
@@ -257,6 +357,11 @@ export default function App() {
   const handleDeleteLog = (id: string) => {
     setLogs((prev) => prev.filter((l) => l.id !== id));
     cloudDeleteDailyLog(id);
+  };
+
+  const handleUpdateLog = (updatedLog: DailyLogEntry) => {
+    setLogs((prev) => prev.map((l) => (l.id === updatedLog.id ? updatedLog : l)));
+    cloudSaveDailyLog(updatedLog);
   };
 
   // Handlers for Manual Adjustments (Synced to Cloud)
@@ -412,6 +517,8 @@ export default function App() {
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenManageAccessCodes={() => setIsManageCodesOpen(true)}
         studentCount={students.length}
+        delegatedUsers={delegatedUsers}
+        pendingScheduleCount={pendingScheduleCount}
       />
 
       {/* Main Tab Content */}
@@ -438,8 +545,33 @@ export default function App() {
             currentUser={currentUser}
             config={config}
             onAddLog={handleAddLog}
+            onUpdateLog={handleUpdateLog}
             onDeleteLog={handleDeleteLog}
             onOpenNotificationModal={(stId) => handleOpenNotificationForStudent(stId)}
+          />
+        )}
+
+        {activeTab === 'schedule' && (
+          <ActivityScheduleManager
+            activities={scheduledActivities}
+            students={students}
+            config={config}
+            currentUser={currentUser}
+            onSaveActivity={handleSaveScheduledActivity}
+            onDeleteActivity={handleDeleteScheduledActivity}
+            onRecordNotification={(rec) => {
+              const fullRec: NotificationRecord = {
+                ...rec,
+                id: `notif_${Date.now()}`,
+                createdAt: new Date().toISOString(),
+              };
+              setNotifications((prev) => {
+                const updated = [fullRec, ...prev];
+                saveToStorage('NOTIFICATIONS', updated);
+                return updated;
+              });
+              cloudSaveNotification(fullRec).catch(console.error);
+            }}
           />
         )}
 
@@ -461,6 +593,7 @@ export default function App() {
           <StudentManagementModal
             students={students}
             className={config.className}
+            currentUser={currentUser}
             onAddStudent={handleAddStudent}
             onUpdateStudent={handleUpdateStudent}
             onDeleteStudent={handleDeleteStudent}
@@ -503,17 +636,22 @@ export default function App() {
         <AccessCodeAuthModal
           pendingRole={pendingAuth}
           accessCodes={accessCodes}
+          delegatedUsers={delegatedUsers}
           onSuccess={handleAuthSuccess}
           onCancel={() => setPendingAuth(null)}
         />
       )}
 
-      {/* Manage Access Codes Modal (for GVCN) */}
+      {/* Manage Access Codes & Delegation Modal (for GVCN) */}
       {isManageCodesOpen && (
         <ManageAccessCodesModal
           accessCodes={accessCodes}
+          delegatedUsers={delegatedUsers}
           className={config.className}
+          teacherName={config.homeroomTeacher}
           onUpdateAccessCodes={handleUpdateAccessCodes}
+          onSaveDelegatedUser={handleSaveDelegatedUser}
+          onDeleteDelegatedUser={handleDeleteDelegatedUser}
           onClose={() => setIsManageCodesOpen(false)}
         />
       )}

@@ -105,13 +105,37 @@ export interface GroupPeriodSummary extends GroupWeeklySummary {
   weeksEvaluated: number;
 }
 
-export type UserRole = 'teacher' | 'team_leader' | 'class_monitor' | 'student';
+export type UserRole = 'teacher' | 'team_leader' | 'class_monitor' | 'student' | 'delegated';
+
+export interface DelegatedPermission {
+  canLogDaily: boolean;      // Ghi nhận vi phạm & tuyên dương việc tốt
+  canEditLogs: boolean;      // Chỉnh sửa nhật ký đã ghi
+  canDeleteLogs: boolean;    // Xóa nhật ký đã ghi
+  canAdjustScores: boolean;  // Điều chỉnh điểm rèn luyện thi đua (thủ công)
+  canSendNotice: boolean;    // Gửi thông báo Zalo / Email cho phụ huynh
+  canManageSchedule?: boolean; // Lên lịch hoạt động & gửi nhắc việc
+  groupScope: GroupNumber | 'all'; // Phạm vi tổ được phân công (Tổ 1-4 hoặc Cả lớp)
+}
+
+export interface DelegatedUser {
+  id: string;
+  name: string;              // Họ và tên người được uỷ quyền
+  title: string;             // Chức danh/Nhiệm vụ (VD: GVBM Toán, Giám thị khối, Thư ký...)
+  accessCode: string;        // Mã PIN / khoá truy cập uỷ quyền
+  permissions: DelegatedPermission;
+  isActive: boolean;         // Trạng thái kích hoạt (true/false)
+  notes?: string;            // Ghi chú nhiệm vụ
+  createdAt: string;
+  delegatedBy?: string;      // GVCN cấp quyền
+}
 
 export interface CurrentUser {
   role: UserRole;
   name: string;
   groupAccess?: GroupNumber | 'all'; // Tổ trưởng chỉ phụ trách tổ của mình hoặc có thể xem cả lớp
   title: string;
+  delegatedPermissions?: DelegatedPermission;
+  delegatedUserId?: string;
 }
 
 export interface ClassConfig {
@@ -145,5 +169,40 @@ export interface AccessCodesConfig {
   team3: string;   // Mã Tổ trưởng Tổ 3
   team4: string;   // Mã Tổ trưởng Tổ 4
   monitor: string; // Mã Ban cán sự lớp
+}
+
+export type ScheduleFrequency = 'daily' | 'weekly' | 'monthly';
+
+export type ScheduleCategory =
+  | 'cleaning'
+  | 'academic'
+  | 'discipline'
+  | 'movement'
+  | 'meeting'
+  | 'other';
+
+export interface ScheduledActivity {
+  id: string;
+  title: string;
+  description: string;
+  frequency: ScheduleFrequency;
+  category: ScheduleCategory;
+  dayOfWeek?: DayOfWeek | 'All'; // Áp dụng cho lịch Hằng ngày / Hằng tuần
+  dayOfMonth?: number;           // Áp dụng cho lịch Hằng tháng (Ngày 1..31)
+  month?: number;                // Tháng áp dụng (1..12) hoặc định kỳ mỗi tháng
+  week?: number;                 // Tuần học áp dụng (1..35)
+  timeSlot: string;              // Khung giờ / hạn chót (VD: "06:45 - 07:05", "Tiết 5 Thứ Bảy")
+  session: 'morning' | 'afternoon' | 'all_day';
+  assignedScope: 'all' | 'group' | 'officers' | 'individual';
+  assignedGroup?: GroupNumber;
+  assignedStudentIds?: string[];
+  assignedStudentNames?: string[];
+  status: 'pending' | 'in_progress' | 'completed' | 'overdue';
+  priority: 'normal' | 'high' | 'urgent';
+  autoRemind: boolean;
+  lastRemindedAt?: string;
+  reminderCount: number;
+  createdBy: string;
+  createdAt: string;
 }
 
