@@ -8,6 +8,7 @@
         "id": { "type": "string" },
         "code": { "type": "string" },
         "fullName": { "type": "string" },
+        "className": { "type": "string" },
         "gender": { "type": "string" },
         "dob": { "type": "string" },
         "group": { "type": "number" },

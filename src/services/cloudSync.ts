@@ -143,6 +143,24 @@ export async function initializeCloudDatabaseIfNeeded() {
         }
       }).catch(console.error);
 
+      // Ensure multi-class sample students for Lớp 10A1 and Lớp 11A2 are seeded if not present yet
+      const hasMultiClassStudents = studentsSnap.docs.some((d) => {
+        const st = d.data() as Student;
+        return st.className === 'Lớp 10A1' || st.className === 'Lớp 11A2';
+      });
+      if (!hasMultiClassStudents) {
+        const multiClassSeeds = DEFAULT_STUDENTS.filter(
+          (st) => st.className === 'Lớp 10A1' || st.className === 'Lớp 11A2'
+        );
+        if (multiClassSeeds.length > 0) {
+          const b = writeBatch(db);
+          for (const st of multiClassSeeds) {
+            b.set(doc(db, PATHS.STUDENTS, st.id), st);
+          }
+          b.commit().catch(console.error);
+        }
+      }
+
       // Check if access codes or class config need update to CN230876 and Bồ Công Lâm
       const codesDocRef = doc(db, PATHS.SETTINGS, PATHS.ACCESS_CODES_DOC);
       const configDocRef = doc(db, PATHS.SETTINGS, PATHS.CONFIG_DOC);

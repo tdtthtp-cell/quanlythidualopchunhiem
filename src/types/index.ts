@@ -6,6 +6,7 @@ export interface Student {
   id: string;
   code: string; // Mã số học sinh, ví dụ HS1001
   fullName: string;
+  className?: string; // Lớp chủ nhiệm, ví dụ "Lớp 10A3", "Lớp 10A1"
   gender: 'Nam' | 'Nữ';
   dob?: string;
   group: GroupNumber;

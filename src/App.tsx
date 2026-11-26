@@ -227,33 +227,41 @@ export default function App() {
     };
   }, []);
 
-  // Dynamic calculations for current week & semester
+  // Students belonging to the currently active homeroom class (legacy records default to 'Lớp 10A3')
+  const currentClassStudents = useMemo(() => {
+    const activeClass = config.className || 'Lớp 10A3';
+    return students.filter((s) => (s.className || 'Lớp 10A3') === activeClass);
+  }, [students, config.className]);
+
+  // Dynamic calculations for current week & semester (scoped to current active class)
   const weeklyScores = useMemo(() => {
     return calculateStudentWeeklyScores(
-      students,
+      currentClassStudents,
       logs,
       adjustments,
       config.currentWeek,
       config.currentSemester,
       config.baseScore
     );
-  }, [students, logs, adjustments, config.currentWeek, config.currentSemester, config.baseScore]);
+  }, [currentClassStudents, logs, adjustments, config.currentWeek, config.currentSemester, config.baseScore]);
 
   const groupSummaries = useMemo(() => {
     return calculateGroupSummaries(weeklyScores);
   }, [weeklyScores]);
 
-  // Severe infractions alert count
+  // Severe infractions alert count (scoped to current active class)
   const severeAlertCount = useMemo(() => {
+    const classStudentIds = new Set(currentClassStudents.map((s) => s.id));
     return logs.filter(
       (l) =>
+        classStudentIds.has(l.studentId) &&
         l.week === config.currentWeek &&
         l.semester === config.currentSemester &&
         (l.criteriaName.includes('Sử dụng ĐT') ||
           l.criteriaName.includes('không phép') ||
           l.delta <= -3)
     ).length;
-  }, [logs, config.currentWeek, config.currentSemester]);
+  }, [logs, currentClassStudents, config.currentWeek, config.currentSemester]);
 
   // Pending scheduled activities count
   const pendingScheduleCount = useMemo(() => {
@@ -496,23 +504,71 @@ export default function App() {
     cloudSaveManualAdjustment(newAdj);
   };
 
-  // Handlers for Students (Synced to Cloud)
+  // Handlers for Students (Synced to Cloud & Scoped by Class)
   const handleAddStudent = (data: Omit<Student, 'id'>) => {
     const newStudent: Student = {
       ...data,
-      id: `hs_${Date.now()}`,
+      className: data.className || config.className,
+      id: `hs_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     };
-    setStudents((prev) => [...prev, newStudent]);
+    setStudents((prev) => {
+      const updated = [...prev, newStudent];
+      saveToStorage('STUDENTS', updated);
+      return updated;
+    });
     cloudSaveStudent(newStudent);
   };
 
+  const handleBatchAddStudents = (
+    newStudentsData: Omit<Student, 'id'>[],
+    targetClassName: string
+  ) => {
+    if (newStudentsData.length === 0) return;
+    const now = Date.now();
+    const createdList: Student[] = newStudentsData.map((data, idx) => ({
+      ...data,
+      className: data.className || targetClassName || config.className,
+      id: `hs_${now}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+    }));
+
+    setStudents((prev) => {
+      const updated = [...prev, ...createdList];
+      saveToStorage('STUDENTS', updated);
+      return updated;
+    });
+    cloudBatchSaveStudents(createdList);
+  };
+
   const handleUpdateStudent = (updated: Student) => {
-    setStudents((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-    cloudSaveStudent(updated);
+    const normalized: Student = {
+      ...updated,
+      className: updated.className || config.className,
+    };
+    setStudents((prev) => {
+      const next = prev.map((s) => (s.id === normalized.id ? normalized : s));
+      saveToStorage('STUDENTS', next);
+      return next;
+    });
+    cloudSaveStudent(normalized);
+  };
+
+  const handleBatchUpdateStudents = (updatedList: Student[]) => {
+    if (updatedList.length === 0) return;
+    const updateMap = new Map(updatedList.map((s) => [s.id, s]));
+    setStudents((prev) => {
+      const next = prev.map((s) => updateMap.get(s.id) || s);
+      saveToStorage('STUDENTS', next);
+      return next;
+    });
+    cloudBatchSaveStudents(updatedList);
   };
 
   const handleDeleteStudent = (id: string) => {
-    setStudents((prev) => prev.filter((s) => s.id !== id));
+    setStudents((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveToStorage('STUDENTS', next);
+      return next;
+    });
     cloudDeleteStudent(id);
   };
 
@@ -522,7 +578,11 @@ export default function App() {
     const idsSet = new Set(studentIds);
 
     // Remove from students
-    setStudents((prev) => prev.filter((s) => !idsSet.has(s.id)));
+    setStudents((prev) => {
+      const next = prev.filter((s) => !idsSet.has(s.id));
+      saveToStorage('STUDENTS', next);
+      return next;
+    });
 
     // Clean up related logs and adjustments
     const logsToDelete = logs.filter((l) => idsSet.has(l.studentId));
@@ -541,9 +601,43 @@ export default function App() {
     cloudBatchDeleteStudents(studentIds);
   };
 
-  const handleBatchImportStudents = (newStudents: Student[]) => {
-    setStudents(newStudents);
-    cloudBatchSaveStudents(newStudents);
+  const handleBatchImportStudents = (
+    newStudents: Student[],
+    mode: 'append' | 'replace' = 'append',
+    targetClassName: string = config.className
+  ) => {
+    const stamped = newStudents.map((s) => ({
+      ...s,
+      className: s.className || targetClassName,
+    }));
+
+    if (mode === 'append') {
+      setStudents((prev) => {
+        const next = [...prev, ...stamped];
+        saveToStorage('STUDENTS', next);
+        return next;
+      });
+      cloudBatchSaveStudents(stamped);
+    } else {
+      // Replace only students belonging to targetClassName, preserving other classes
+      const oldClassIds = students
+        .filter((s) => (s.className || 'Lớp 10A3') === targetClassName)
+        .map((s) => s.id);
+
+      setStudents((prev) => {
+        const otherClassesStudents = prev.filter(
+          (s) => (s.className || 'Lớp 10A3') !== targetClassName
+        );
+        const next = [...otherClassesStudents, ...stamped];
+        saveToStorage('STUDENTS', next);
+        return next;
+      });
+
+      if (oldClassIds.length > 0) {
+        cloudBatchDeleteStudents(oldClassIds);
+      }
+      cloudBatchSaveStudents(stamped);
+    }
   };
 
   // Handlers for Config and Access Codes (Synced to Cloud)
@@ -617,7 +711,7 @@ export default function App() {
         onOpenManageAccessCodes={() => setIsManageCodesOpen(true)}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
         homeroomClasses={homeroomClasses}
-        studentCount={students.length}
+        studentCount={currentClassStudents.length}
         delegatedUsers={delegatedUsers}
         pendingScheduleCount={pendingScheduleCount}
       />
@@ -630,7 +724,7 @@ export default function App() {
             groupSummaries={groupSummaries}
             logs={logs}
             config={config}
-            students={students}
+            students={currentClassStudents}
             adjustments={adjustments}
             onNavigateToTab={setActiveTab}
             onOpenReportForStudent={handleOpenReportForStudent}
@@ -640,7 +734,7 @@ export default function App() {
 
         {activeTab === 'daily_logs' && (
           <DailySessionSheet
-            students={students}
+            students={currentClassStudents}
             logs={logs}
             criteria={criteria}
             currentUser={currentUser}
@@ -655,7 +749,7 @@ export default function App() {
         {activeTab === 'schedule' && (
           <ActivityScheduleManager
             activities={scheduledActivities}
-            students={students}
+            students={currentClassStudents}
             config={config}
             currentUser={currentUser}
             onSaveActivity={handleSaveScheduledActivity}
@@ -681,7 +775,7 @@ export default function App() {
             scores={weeklyScores}
             config={config}
             currentUser={currentUser}
-            students={students}
+            students={currentClassStudents}
             logs={logs}
             adjustments={adjustments}
             onOpenReportModal={handleOpenReportForStudent}
@@ -692,14 +786,20 @@ export default function App() {
 
         {activeTab === 'students' && (
           <StudentManagementModal
-            students={students}
+            students={currentClassStudents}
+            allStudents={students}
             className={config.className}
+            homeroomClasses={homeroomClasses}
             currentUser={currentUser}
             onAddStudent={handleAddStudent}
+            onBatchAddStudents={handleBatchAddStudents}
             onUpdateStudent={handleUpdateStudent}
+            onBatchUpdateStudents={handleBatchUpdateStudents}
             onDeleteStudent={handleDeleteStudent}
             onBatchDeleteStudents={handleBatchDeleteStudents}
             onBatchImportStudents={handleBatchImportStudents}
+            onSwitchHomeroomClass={handleSwitchHomeroomClass}
+            onOpenAddClassModal={() => setIsSuperAdminModalOpen(true)}
           />
         )}
 
@@ -750,11 +850,17 @@ export default function App() {
         homeroomClasses={homeroomClasses}
         currentConfig={config}
         currentAccessCodes={accessCodes}
-        students={students}
+        students={currentClassStudents}
+        allStudents={students}
         currentUser={currentUser}
         onSaveHomeroomClass={handleSaveHomeroomClass}
         onDeleteHomeroomClass={handleDeleteHomeroomClass}
         onSwitchHomeroomClass={handleSwitchHomeroomClass}
+        onManageClassStudents={(cls) => {
+          handleSwitchHomeroomClass(cls);
+          setIsSuperAdminModalOpen(false);
+          setActiveTab('students');
+        }}
         onUpdateStudentRole={(studentId, newRole) => {
           const st = students.find((s) => s.id === studentId);
           if (st) {

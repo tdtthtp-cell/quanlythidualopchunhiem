@@ -15,6 +15,7 @@ import {
   GraduationCap,
   ArrowRightLeft,
   Search,
+  Users,
 } from 'lucide-react';
 import {
   HomeroomClass,
@@ -32,11 +33,13 @@ interface SuperAdminMultiClassModalProps {
   currentConfig: ClassConfig;
   currentAccessCodes: AccessCodesConfig;
   students: Student[];
+  allStudents?: Student[];
   currentUser: CurrentUser;
   onSaveHomeroomClass: (item: HomeroomClass) => void;
   onDeleteHomeroomClass: (classId: string) => void;
   onSwitchHomeroomClass: (item: HomeroomClass) => void;
   onUpdateStudentRole?: (studentId: string, newRole: string) => void;
+  onManageClassStudents?: (cls: HomeroomClass) => void;
 }
 
 export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps> = ({
@@ -45,11 +48,13 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
   homeroomClasses,
   currentConfig,
   students,
+  allStudents,
   currentUser,
   onSaveHomeroomClass,
   onDeleteHomeroomClass,
   onSwitchHomeroomClass,
   onUpdateStudentRole,
+  onManageClassStudents,
 }) => {
   const [activeTab, setActiveTab] = useState<'classes' | 'officers' | 'new_class'>('classes');
   const [selectedClassId, setSelectedClassId] = useState<string>(
@@ -408,6 +413,15 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {filteredClasses.map((cls) => {
                   const isCurrentActive = cls.className === currentConfig.className;
+                  const classStudentList = (allStudents || students).filter(
+                    (s) => (s.className || 'Lớp 10A3') === cls.className
+                  );
+                  const liveCount =
+                    classStudentList.length > 0
+                      ? classStudentList.length
+                      : isCurrentActive
+                      ? students.length
+                      : cls.studentCount;
                   return (
                     <div
                       key={cls.id}
@@ -454,7 +468,7 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-500">Sĩ số lớp:</span>
                             <strong className="text-indigo-700">
-                              {isCurrentActive ? students.length : cls.studentCount} học sinh (4 Tổ)
+                              {liveCount} học sinh (4 Tổ)
                             </strong>
                           </div>
                           <div className="flex items-center justify-between">
@@ -524,6 +538,17 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                             Phân quyền BCS
                           </button>
                         </div>
+
+                        {onManageClassStudents && (
+                          <button
+                            type="button"
+                            onClick={() => onManageClassStudents(cls)}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200 hover:border-indigo-300 font-bold rounded-xl transition-colors"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            Quản lý DS Học sinh {cls.className} (Thêm / Sửa / Xoá hàng loạt)
+                          </button>
+                        )}
 
                         {canManageClasses && (
                           <div className="flex items-center justify-between gap-2 pt-1">
@@ -700,55 +725,62 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                         roleTitle: 'Lớp trưởng',
                       },
                     ] as const
-                  ).map((item) => (
-                    <div
-                      key={item.field}
-                      className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-800 block">{item.label}</span>
-                        <span className="text-[11px] text-indigo-600 font-semibold">
-                          Đương nhiệm: {selectedClass.officers[item.field] || 'Chưa chỉ định'}
-                        </span>
-                      </div>
+                  ).map((item) => {
+                    const selectedClassStudents = (allStudents || students).filter(
+                      (s) => (s.className || 'Lớp 10A3') === selectedClass.className
+                    );
+                    return (
+                      <div
+                        key={item.field}
+                        className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-800 block">{item.label}</span>
+                          <span className="text-[11px] text-indigo-600 font-semibold">
+                            Đương nhiệm: {selectedClass.officers[item.field] || 'Chưa chỉ định'}
+                          </span>
+                        </div>
 
-                      {isSelectedCurrentActive ? (
-                        <select
-                          aria-label={item.label}
-                          value={selectedClass.officers[item.field]}
-                          onChange={(e) => {
-                            const st = students.find((s) => s.fullName === e.target.value);
-                            handleUpdateSelectedClassOfficer(
-                              item.field,
-                              e.target.value,
-                              st?.id,
-                              item.roleTitle
-                            );
-                          }}
-                          className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-900 min-w-[200px]"
-                        >
-                          <option value={selectedClass.officers[item.field]}>
-                            {selectedClass.officers[item.field]}
-                          </option>
-                          {students.map((st) => (
-                            <option key={st.id} value={st.fullName}>
-                              {st.fullName} (Tổ {st.group} - {st.code})
+                        {selectedClassStudents.length > 0 ? (
+                          <select
+                            aria-label={item.label}
+                            value={selectedClass.officers[item.field]}
+                            onChange={(e) => {
+                              const st = selectedClassStudents.find(
+                                (s) => s.fullName === e.target.value
+                              );
+                              handleUpdateSelectedClassOfficer(
+                                item.field,
+                                e.target.value,
+                                st?.id,
+                                item.roleTitle
+                              );
+                            }}
+                            className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-900 min-w-[200px]"
+                          >
+                            <option value={selectedClass.officers[item.field]}>
+                              {selectedClass.officers[item.field]}
                             </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          type="text"
-                          value={selectedClass.officers[item.field]}
-                          onChange={(e) =>
-                            handleUpdateSelectedClassOfficer(item.field, e.target.value)
-                          }
-                          placeholder="Nhập họ tên học sinh..."
-                          className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-900 min-w-[200px]"
-                        />
-                      )}
-                    </div>
-                  ))}
+                            {selectedClassStudents.map((st) => (
+                              <option key={st.id} value={st.fullName}>
+                                {st.fullName} (Tổ {st.group} - {st.code})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={selectedClass.officers[item.field]}
+                            onChange={(e) =>
+                              handleUpdateSelectedClassOfficer(item.field, e.target.value)
+                            }
+                            placeholder="Nhập họ tên học sinh..."
+                            className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-semibold text-slate-900 min-w-[200px]"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Section 2: 4 Tổ Trưởng (Tổ 1, 2, 3, 4) & Mã Khóa Từng Tổ */}
@@ -797,7 +829,12 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                       },
                     ] as const
                   ).map((team) => {
-                    const groupStudents = students.filter((s) => s.group === team.group);
+                    const selectedClassStudents = (allStudents || students).filter(
+                      (s) => (s.className || 'Lớp 10A3') === selectedClass.className
+                    );
+                    const groupStudents = selectedClassStudents.filter(
+                      (s) => s.group === team.group
+                    );
                     return (
                       <div
                         key={team.group}
@@ -829,7 +866,7 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                           <span className="text-[11px] text-slate-500">
                             Học sinh giữ chức Tổ trưởng:
                           </span>
-                          {isSelectedCurrentActive ? (
+                          {groupStudents.length > 0 ? (
                             <select
                               aria-label={team.label}
                               value={selectedClass.officers[team.field]}
