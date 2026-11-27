@@ -1429,7 +1429,7 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                     {visibleHomeroomClasses.length > 0 ? (
                       visibleHomeroomClasses.map((cls) => (
                         <option key={cls.id} value={cls.className}>
-                          {cls.className} — GVCN: {cls.homeroomTeacher} (Hiện có{' '}
+                          {cls.className} (Hiện có{' '}
                           {studentCountByClass[cls.className] || 0} HS)
                         </option>
                       ))
@@ -1831,8 +1831,7 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                     </option>
                     {visibleHomeroomClasses.map((cls) => (
                       <option key={cls.id} value={cls.className}>
-                        <ArrowRightLeft className="w-3 h-3 inline" /> Chuyển sang{' '}
-                        {cls.className} (GVCN: {cls.homeroomTeacher})
+                        Chuyển sang {cls.className}
                       </option>
                     ))}
                   </select>

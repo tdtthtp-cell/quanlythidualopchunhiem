@@ -396,7 +396,7 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500">Lớp:</span>
             <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
-              {currentConfig.className} (GVCN: {currentConfig.homeroomTeacher})
+              {currentConfig.className} · Năm học {currentConfig.academicYear}
             </span>
           </div>
         </div>
@@ -651,7 +651,7 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                             : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
                         }`}
                       >
-                        {cls.className} ({cls.homeroomTeacher})
+                        {cls.className}
                       </button>
                     ))}
                   </div>

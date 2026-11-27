@@ -428,7 +428,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                   {/* 4. Switch Role / Login Section (Short, concise labels, NO email) */}
                   <div className="p-2.5 space-y-1.5">
                     <div className="px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      Chuyển đổi quyền sử dụng
+                      Đăng nhập / Chọn lớp theo phân quyền
                     </div>
 
                     <div className="grid grid-cols-2 gap-1.5">
@@ -460,7 +460,9 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                         }`}
                       >
                         <span className="truncate">
-                          GVCN {activeShortClass}
+                          {currentRoleValue === 'teacher'
+                            ? `GVCN ${activeShortClass}`
+                            : 'GVCN (Chọn lớp)'}
                         </span>
                         {currentRoleValue === 'teacher' && (
                           <Check className="w-3.5 h-3.5 shrink-0" />
@@ -476,7 +478,11 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                             : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
                         }`}
                       >
-                        <span className="truncate">BCS {activeShortClass}</span>
+                        <span className="truncate">
+                          {currentRoleValue === 'class_monitor'
+                            ? `BCS ${activeShortClass}`
+                            : 'BCS (Chọn lớp)'}
+                        </span>
                         {currentRoleValue === 'class_monitor' && (
                           <Check className="w-3.5 h-3.5 shrink-0" />
                         )}

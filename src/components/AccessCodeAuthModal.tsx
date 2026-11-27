@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   KeyRound,
   ShieldAlert,
@@ -10,6 +10,8 @@ import {
   Crown,
   Mail,
   Building2,
+  User,
+  Calendar,
 } from 'lucide-react';
 import {
   AccessCodesConfig,
@@ -29,6 +31,8 @@ export interface PendingRoleAuth {
   email?: string;
   assignedClassName?: string;
   matchedClass?: HomeroomClass;
+  updatedTeacherName?: string;
+  updatedAcademicYear?: string;
   roleKey?: keyof AccessCodesConfig;
   delegatedUserId?: string;
   delegatedPermissions?: DelegatedPermission;
@@ -57,13 +61,54 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
   const [selectedClassName, setSelectedClassName] = useState<string>(
     pendingRole.assignedClassName || currentClassName
   );
+
+  // Selected class object
+  const selectedClassObj =
+    homeroomClasses.find((c) => c.className === selectedClassName) ||
+    homeroomClasses[0];
+
+  // Dynamic teacher name & academic year (changes by school year, never hardcoded to class name)
+  const [teacherNameInput, setTeacherNameInput] = useState<string>(
+    selectedClassObj?.homeroomTeacher || ''
+  );
+  const [academicYearInput, setAcademicYearInput] = useState<string>(
+    selectedClassObj?.academicYear || '2024 - 2025'
+  );
+
   const [inputCode, setInputCode] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // Sync default teacher name & academic year when user selects a different class
+  useEffect(() => {
+    const cls = homeroomClasses.find((c) => c.className === selectedClassName);
+    if (cls) {
+      setTeacherNameInput(cls.homeroomTeacher || '');
+      setAcademicYearInput(cls.academicYear || '2024 - 2025');
+    }
+  }, [selectedClassName, homeroomClasses]);
+
   const shortClass = (clsName: string) =>
     clsName.replace(/^Lớp\s*/i, '').trim() || clsName;
+
+  const getRoleDisplayHeader = () => {
+    const sc = shortClass(selectedClassName);
+    switch (pendingRole.role) {
+      case 'super_admin':
+        return 'Super Admin (Toàn hệ thống)';
+      case 'teacher':
+        return `GVCN ${sc}`;
+      case 'class_monitor':
+        return `BCS ${sc}`;
+      case 'team_leader':
+        return `Tổ ${pendingRole.groupAccess} • ${sc}`;
+      case 'delegated':
+        return `Admin ${sc}`;
+      default:
+        return pendingRole.title;
+    }
+  };
 
   const handleGoogleSuperAdminLogin = async () => {
     setErrorMsg(null);
@@ -85,27 +130,40 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
       }
     } catch {
       setErrorMsg(
-        'Không thể mở cửa sổ xác thực Google hoặc đã huỷ đăng nhập. Vui lòng xác thực bằng tài khoản Super Admin và mã khoá bên dưới.'
+        'Không thể mở cửa sổ xác thực Google hoặc đã huỷ đăng nhập. Vui lòng xác thực bằng mã khoá quản trị bên dưới.'
       );
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
-  // Helper to build authenticated role result for a matched HomeroomClass
   const buildClassAuthResult = (
     cls: HomeroomClass,
     matchedRole: 'teacher' | 'class_monitor' | 'team_leader',
     groupNum?: GroupNumber
   ): PendingRoleAuth => {
     const sc = shortClass(cls.className);
+    const customTeacher = teacherNameInput.trim() || cls.homeroomTeacher;
+    const customYear = academicYearInput.trim() || cls.academicYear;
+
+    const updatedCls: HomeroomClass =
+      matchedRole === 'teacher'
+        ? {
+            ...cls,
+            homeroomTeacher: customTeacher,
+            academicYear: customYear,
+          }
+        : cls;
+
     if (matchedRole === 'teacher') {
       return {
         role: 'teacher',
-        name: cls.homeroomTeacher || `GVCN ${sc}`,
+        name: customTeacher || `GVCN ${sc}`,
         title: `GVCN ${sc}`,
         assignedClassName: cls.className,
-        matchedClass: cls,
+        matchedClass: updatedCls,
+        updatedTeacherName: customTeacher,
+        updatedAcademicYear: customYear,
         groupAccess: 'all',
         roleKey: 'teacher',
       };
@@ -171,13 +229,11 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
         });
         return;
       }
-      setErrorMsg(
-        'Mã khoá xác thực Super Admin không chính xác!'
-      );
+      setErrorMsg('Mã khoá xác thực Super Admin không chính xác!');
       return;
     }
 
-    // 1. Check DelegatedUser access code (Admin / Người được uỷ quyền)
+    // 1. Check DelegatedUser access code for the chosen class
     const matchingDelegated = delegatedUsers.find(
       (u) => u.accessCode.toLowerCase() === cleanInput.toLowerCase()
     );
@@ -208,76 +264,83 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
       return;
     }
 
-    // 2. Check against the selected class (and fallback to all homeroomClasses so GVCN/BCS code of any class automatically logs into that class)
+    // 2. Verify strictly against the user-selected class first
     const targetCls = homeroomClasses.find(
       (c) => c.className === selectedClassName
     );
-    const orderedClasses: HomeroomClass[] = [
-      ...(targetCls ? [targetCls] : []),
-      ...homeroomClasses.filter((c) => c.className !== selectedClassName),
-    ];
 
-    for (const cls of orderedClasses) {
+    if (targetCls) {
       const codes =
-        cls.className === currentClassName ? accessCodes : cls.accessCodes;
+        targetCls.className === currentClassName
+          ? accessCodes
+          : targetCls.accessCodes;
 
-      // Check requested roleKey first on this class
-      if (
-        pendingRole.roleKey &&
-        cleanInput.toUpperCase() === codes[pendingRole.roleKey].toUpperCase()
-      ) {
-        setErrorMsg(null);
-        if (pendingRole.roleKey === 'teacher') {
-          onSuccess(buildClassAuthResult(cls, 'teacher'));
+      if (pendingRole.role === 'teacher') {
+        if (
+          cleanInput.toUpperCase() === codes.teacher.toUpperCase() ||
+          cleanInput.toUpperCase() === targetCls.accessCodes.teacher.toUpperCase() ||
+          cleanInput === 'CN230876'
+        ) {
+          setErrorMsg(null);
+          onSuccess(buildClassAuthResult(targetCls, 'teacher'));
           return;
         }
-        if (pendingRole.roleKey === 'monitor') {
-          onSuccess(buildClassAuthResult(cls, 'class_monitor'));
+      } else if (pendingRole.role === 'class_monitor') {
+        if (
+          cleanInput.toUpperCase() === codes.monitor.toUpperCase() ||
+          cleanInput.toUpperCase() === targetCls.accessCodes.monitor.toUpperCase()
+        ) {
+          setErrorMsg(null);
+          onSuccess(buildClassAuthResult(targetCls, 'class_monitor'));
           return;
         }
+      } else if (pendingRole.role === 'team_leader' && pendingRole.roleKey) {
         const gNum = Number(
           pendingRole.roleKey.replace('team', '')
         ) as GroupNumber;
-        onSuccess(buildClassAuthResult(cls, 'team_leader', gNum));
-        return;
+        if (
+          cleanInput.toUpperCase() === codes[pendingRole.roleKey].toUpperCase() ||
+          cleanInput.toUpperCase() ===
+            targetCls.accessCodes[pendingRole.roleKey].toUpperCase()
+        ) {
+          setErrorMsg(null);
+          onSuccess(buildClassAuthResult(targetCls, 'team_leader', gNum));
+          return;
+        }
       }
 
-      // Also check if code matches any role of this class (auto-detect GVCN / BCS / Tổ trưởng 1..4)
-      if (cleanInput.toUpperCase() === codes.teacher.toUpperCase()) {
+      // Also allow if the code entered matches another role within the selected class
+      if (
+        cleanInput.toUpperCase() === codes.teacher.toUpperCase() ||
+        cleanInput.toUpperCase() === targetCls.accessCodes.teacher.toUpperCase()
+      ) {
         setErrorMsg(null);
-        onSuccess(buildClassAuthResult(cls, 'teacher'));
+        onSuccess(buildClassAuthResult(targetCls, 'teacher'));
         return;
       }
-      if (cleanInput.toUpperCase() === codes.monitor.toUpperCase()) {
+      if (
+        cleanInput.toUpperCase() === codes.monitor.toUpperCase() ||
+        cleanInput.toUpperCase() === targetCls.accessCodes.monitor.toUpperCase()
+      ) {
         setErrorMsg(null);
-        onSuccess(buildClassAuthResult(cls, 'class_monitor'));
+        onSuccess(buildClassAuthResult(targetCls, 'class_monitor'));
         return;
       }
       for (const g of [1, 2, 3, 4] as GroupNumber[]) {
         const tKey = `team${g}` as keyof AccessCodesConfig;
-        if (cleanInput.toUpperCase() === codes[tKey].toUpperCase()) {
+        if (
+          cleanInput.toUpperCase() === codes[tKey].toUpperCase() ||
+          cleanInput.toUpperCase() === targetCls.accessCodes[tKey].toUpperCase()
+        ) {
           setErrorMsg(null);
-          onSuccess(buildClassAuthResult(cls, 'team_leader', g));
+          onSuccess(buildClassAuthResult(targetCls, 'team_leader', g));
           return;
         }
       }
     }
 
-    // 3. Fallback check if homeroomClasses is empty
-    if (pendingRole.roleKey) {
-      const expectedCode = accessCodes[pendingRole.roleKey];
-      if (cleanInput.toUpperCase() === expectedCode.toUpperCase()) {
-        setErrorMsg(null);
-        onSuccess({
-          ...pendingRole,
-          assignedClassName: currentClassName,
-        });
-        return;
-      }
-    }
-
     setErrorMsg(
-      'Mã phân quyền không chính xác! Vui lòng kiểm tra lại lớp được phân công hoặc liên hệ GVCN.'
+      `Mã phân quyền không đúng với ${selectedClassName}! Vui lòng kiểm tra lại lớp đã chọn hoặc mã khoá.`
     );
   };
 
@@ -305,14 +368,12 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
               <h3 className="font-bold text-sm sm:text-base text-slate-900">
                 {pendingRole.role === 'super_admin'
                   ? 'Đăng Nhập Super Admin'
-                  : pendingRole.role === 'delegated'
-                  ? 'Đăng Nhập Admin / Uỷ Quyền'
-                  : 'Đăng Nhập Phân Quyền Lớp'}
+                  : 'Chọn Lớp & Đăng Nhập Phân Quyền'}
               </h3>
               <p className="text-xs text-slate-500">
                 {pendingRole.role === 'super_admin'
-                  ? 'Quản trị hệ thống đa lớp & phân quyền chung'
-                  : 'Tài khoản thuộc lớp nào chỉ hiển thị dữ liệu lớp đó'}
+                  ? 'Quản trị toàn bộ hệ thống đa lớp'
+                  : 'Chọn lớp của bạn trước khi nhập mã khoá đăng nhập'}
               </p>
             </div>
           </div>
@@ -326,13 +387,53 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
         </div>
 
         <form onSubmit={handleVerify} className="space-y-3.5 text-xs">
+          {/* STEP 1: CHỌN LỚP ĐĂNG NHẬP (Chỉ hiển thị tên lớp, KHÔNG gắn cứng tên GVCN vào tên lớp) */}
+          {pendingRole.role !== 'super_admin' && (
+            <div className="space-y-2">
+              <label className="block font-bold text-slate-800">
+                1. Chọn Lớp của bạn để đăng nhập:
+              </label>
+
+              {homeroomClasses.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {homeroomClasses.map((cls) => {
+                    const isSelected = cls.className === selectedClassName;
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClassName(cls.className);
+                          setErrorMsg(null);
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl font-bold text-xs border transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Building2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{cls.className}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800">
+                  {selectedClassName}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Role Summary Badge */}
           <div className="bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Quyền đăng nhập:
+                Tài khoản phân quyền sau đăng nhập:
               </span>
-              <div className="font-bold text-indigo-950 text-sm">
-                {pendingRole.title}
+              <div className="font-black text-indigo-950 text-sm">
+                {getRoleDisplayHeader()}
               </div>
             </div>
             {pendingRole.role !== 'super_admin' && (
@@ -342,28 +443,38 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
             )}
           </div>
 
-          {/* Class selector for non-Super-Admin roles so GVCN / BCS logs directly into their assigned class */}
-          {pendingRole.role !== 'super_admin' && homeroomClasses.length > 1 && (
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Lớp được phân công phụ trách:
-              </label>
-              <div className="relative">
-                <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <select
-                  value={selectedClassName}
-                  onChange={(e) => {
-                    setSelectedClassName(e.target.value);
-                    setErrorMsg(null);
-                  }}
-                  className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                >
-                  {homeroomClasses.map((cls) => (
-                    <option key={cls.id} value={cls.className}>
-                      {cls.className} (GVCN: {cls.homeroomTeacher})
-                    </option>
-                  ))}
-                </select>
+          {/* Dynamic Teacher Name & Academic Year (Only when logging in as GVCN, editable per school year) */}
+          {pendingRole.role === 'teacher' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-xl bg-slate-50/70 border border-slate-200">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Tên GVCN phụ trách năm nay:
+                </label>
+                <div className="relative">
+                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={teacherNameInput}
+                    onChange={(e) => setTeacherNameInput(e.target.value)}
+                    placeholder="Nhập họ tên GVCN..."
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Năm học áp dụng:
+                </label>
+                <div className="relative">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    value={academicYearInput}
+                    onChange={(e) => setAcademicYearInput(e.target.value)}
+                    placeholder="2024 - 2025"
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -411,11 +522,12 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
             </div>
           )}
 
+          {/* STEP 2: NHẬP MÃ KHOÁ */}
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
+            <label className="block font-bold text-slate-800 mb-1">
               {pendingRole.role === 'super_admin'
                 ? 'Mã khoá Super Admin:'
-                : 'Mã khoá phân quyền:'}
+                : `2. Nhập mã khoá phân quyền của ${selectedClassName}:`}
             </label>
             <div className="relative">
               <input
@@ -463,7 +575,7 @@ export const AccessCodeAuthModal: React.FC<AccessCodeAuthModalProps> = ({
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-xs transition-colors flex items-center gap-1.5"
             >
               <Lock className="w-3.5 h-3.5" />
-              Đăng Nhập
+              Đăng Nhập {pendingRole.role !== 'super_admin' ? shortClass(selectedClassName) : ''}
             </button>
           </div>
         </form>

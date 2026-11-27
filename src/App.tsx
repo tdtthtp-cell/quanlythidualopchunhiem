@@ -333,7 +333,14 @@ export default function App() {
 
   const handleAuthSuccess = (roleAuth: PendingRoleAuth) => {
     // If the authenticated role belongs to a specific homeroom class, switch workspace to that class
-    if (roleAuth.matchedClass && roleAuth.matchedClass.className !== config.className) {
+    // and persist any updated teacher name / academic year for the new school year
+    if (roleAuth.matchedClass) {
+      if (
+        roleAuth.updatedTeacherName ||
+        roleAuth.updatedAcademicYear
+      ) {
+        handleSaveHomeroomClass(roleAuth.matchedClass);
+      }
       handleSwitchHomeroomClass(roleAuth.matchedClass);
     }
 
@@ -653,10 +660,33 @@ export default function App() {
     }
   };
 
-  // Handlers for Config and Access Codes (Synced to Cloud)
+  // Handlers for Config and Access Codes (Synced to Cloud & synced with homeroomClasses)
   const handleUpdateConfig = (newConfig: ClassConfig) => {
     setConfig(newConfig);
+    saveToStorage('CONFIG', newConfig);
     cloudSaveClassConfig(newConfig);
+
+    // Sync updated homeroomTeacher / academicYear / schoolName to the matching class in homeroomClasses
+    const matchingCls = homeroomClasses.find(
+      (c) => c.className === newConfig.className || c.className === config.className
+    );
+    if (matchingCls) {
+      const updatedCls: HomeroomClass = {
+        ...matchingCls,
+        className: newConfig.className,
+        schoolName: newConfig.schoolName,
+        academicYear: newConfig.academicYear,
+        homeroomTeacher: newConfig.homeroomTeacher,
+        teacherEmail: newConfig.teacherEmail,
+        teacherPhone: newConfig.teacherPhone,
+      };
+      setHomeroomClasses((prev) => {
+        const next = prev.map((c) => (c.id === updatedCls.id ? updatedCls : c));
+        saveToStorage('HOMEROOM_CLASSES', next);
+        return next;
+      });
+      cloudSaveHomeroomClass(updatedCls).catch(console.error);
+    }
   };
 
   const handleUpdateAccessCodes = (newCodes: AccessCodesConfig) => {
