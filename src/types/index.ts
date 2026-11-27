@@ -140,6 +140,7 @@ export interface CurrentUser {
   role: UserRole;
   name: string;
   email?: string;
+  assignedClassName?: string; // Lớp được phân công (VD: "Lớp 10A1", "Lớp 10A3"); Super Admin thấy tất cả lớp
   groupAccess?: GroupNumber | 'all'; // Tổ trưởng chỉ phụ trách tổ của mình hoặc có thể xem cả lớp
   title: string;
   delegatedPermissions?: DelegatedPermission;

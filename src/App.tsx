@@ -122,7 +122,7 @@ export default function App() {
     // Check and seed initial data if Firestore database is empty
     initializeCloudDatabaseIfNeeded();
 
-    // Listen to Firebase Google Auth state for Super Admin (tdtt.htp@gmail.com)
+    // Listen to Firebase Google Auth state for Super Admin
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
       if (
         firebaseUser &&
@@ -131,10 +131,9 @@ export default function App() {
       ) {
         setCurrentUser({
           role: 'super_admin',
-          name: firebaseUser.displayName || 'Super Admin (HTP)',
-          email: SUPER_ADMIN_EMAIL,
+          name: firebaseUser.displayName || 'Super Admin',
           groupAccess: 'all',
-          title: `Super Admin Hệ Thống (${SUPER_ADMIN_EMAIL})`,
+          title: 'Super Admin',
         });
       }
     });
@@ -270,20 +269,21 @@ export default function App() {
 
   // Role authentication request handler
   const handleRequestRoleChange = (roleValue: string) => {
+    const shortCls = (config.className || '10A3').replace(/^Lớp\s*/i, '').trim();
     if (roleValue === 'super_admin') {
       setPendingAuth({
         role: 'super_admin',
         groupAccess: 'all',
-        name: `Tài khoản: ${SUPER_ADMIN_EMAIL}`,
-        title: 'Super Admin Quản Trị Đa Lớp & Phân Quyền Ban Cán Sự',
-        email: SUPER_ADMIN_EMAIL,
+        name: 'Quản trị hệ thống',
+        title: 'Super Admin',
       });
     } else if (roleValue === 'teacher') {
       setPendingAuth({
         role: 'teacher',
         groupAccess: 'all',
-        name: config.homeroomTeacher || 'GVCN',
-        title: 'Giáo viên chủ nhiệm (Toàn quyền)',
+        name: config.homeroomTeacher || `GVCN ${shortCls}`,
+        title: `GVCN ${shortCls}`,
+        assignedClassName: config.className,
         roleKey: 'teacher',
       });
     } else if (roleValue.startsWith('team_leader_')) {
@@ -293,15 +293,17 @@ export default function App() {
         role: 'team_leader',
         groupAccess: g,
         name: `Tổ trưởng Tổ ${g}`,
-        title: `Cán bộ Tổ ${g} (Nhập vi phạm/khen)`,
+        title: `Tổ ${g} • ${shortCls}`,
+        assignedClassName: config.className,
         roleKey: key,
       });
     } else if (roleValue === 'class_monitor') {
       setPendingAuth({
         role: 'class_monitor',
         groupAccess: 'all',
-        name: 'Lớp trưởng / Lớp phó / Cờ đỏ',
-        title: 'Ban cán sự lớp (Theo dõi chung)',
+        name: `Ban cán sự ${shortCls}`,
+        title: `BCS ${shortCls}`,
+        assignedClassName: config.className,
         roleKey: 'monitor',
       });
     } else if (roleValue === 'delegated_prompt') {
@@ -309,7 +311,8 @@ export default function App() {
         role: 'delegated',
         groupAccess: 'all',
         name: 'Người được uỷ quyền',
-        title: 'Đăng nhập bằng mã uỷ quyền (GVBM, Giám thị...)',
+        title: `Admin ${shortCls}`,
+        assignedClassName: config.className,
       });
     } else if (roleValue.startsWith('delegated_')) {
       const delId = roleValue.replace('delegated_', '');
@@ -319,7 +322,8 @@ export default function App() {
           role: 'delegated',
           groupAccess: matched.permissions.groupScope,
           name: matched.name,
-          title: `${matched.title} (Uỷ quyền)`,
+          title: `Admin ${shortCls}`,
+          assignedClassName: config.className,
           delegatedUserId: matched.id,
           delegatedPermissions: matched.permissions,
         });
@@ -328,10 +332,19 @@ export default function App() {
   };
 
   const handleAuthSuccess = (roleAuth: PendingRoleAuth) => {
+    // If the authenticated role belongs to a specific homeroom class, switch workspace to that class
+    if (roleAuth.matchedClass && roleAuth.matchedClass.className !== config.className) {
+      handleSwitchHomeroomClass(roleAuth.matchedClass);
+    }
+
     setCurrentUser({
       role: roleAuth.role,
       name: roleAuth.name,
       email: roleAuth.email,
+      assignedClassName:
+        roleAuth.role === 'super_admin'
+          ? undefined
+          : roleAuth.assignedClassName || config.className,
       groupAccess: roleAuth.groupAccess,
       title: roleAuth.title,
       delegatedPermissions: roleAuth.delegatedPermissions,
@@ -710,6 +723,7 @@ export default function App() {
         onOpenBackup={() => setIsBackupOpen(true)}
         onOpenManageAccessCodes={() => setIsManageCodesOpen(true)}
         onOpenSuperAdminModal={() => setIsSuperAdminModalOpen(true)}
+        onSwitchHomeroomClass={handleSwitchHomeroomClass}
         homeroomClasses={homeroomClasses}
         studentCount={currentClassStudents.length}
         delegatedUsers={delegatedUsers}
@@ -837,6 +851,8 @@ export default function App() {
         <AccessCodeAuthModal
           pendingRole={pendingAuth}
           accessCodes={accessCodes}
+          currentClassName={config.className}
+          homeroomClasses={homeroomClasses}
           delegatedUsers={delegatedUsers}
           onSuccess={handleAuthSuccess}
           onCancel={() => setPendingAuth(null)}

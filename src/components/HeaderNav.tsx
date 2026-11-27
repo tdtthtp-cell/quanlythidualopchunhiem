@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Award,
   Calendar,
@@ -12,12 +12,14 @@ import {
   ShieldCheck,
   Send,
   Database,
-  ChevronRight,
   BookOpen,
   KeyRound,
   LogOut,
   Crown,
   Building2,
+  ChevronDown,
+  UserCheck,
+  Check,
 } from 'lucide-react';
 import {
   ClassConfig,
@@ -25,7 +27,6 @@ import {
   DelegatedUser,
   HomeroomClass,
 } from '../types';
-import { SUPER_ADMIN_EMAIL } from '../firebase';
 
 interface HeaderNavProps {
   config: ClassConfig;
@@ -43,6 +44,7 @@ interface HeaderNavProps {
   onOpenBackup: () => void;
   onOpenManageAccessCodes: () => void;
   onOpenSuperAdminModal?: () => void;
+  onSwitchHomeroomClass?: (cls: HomeroomClass) => void;
   homeroomClasses?: HomeroomClass[];
   studentCount?: number;
   delegatedUsers?: DelegatedUser[];
@@ -64,15 +66,61 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
   onOpenBackup,
   onOpenManageAccessCodes,
   onOpenSuperAdminModal,
+  onSwitchHomeroomClass,
   homeroomClasses = [],
   studentCount = 0,
   delegatedUsers = [],
   pendingScheduleCount = 0,
 }) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
   const weeks = Array.from({ length: 35 }, (_, i) => i + 1);
 
-  const isSuperOrTeacher =
-    currentUser.role === 'super_admin' || currentUser.role === 'teacher';
+  const isSuperAdmin = currentUser.role === 'super_admin';
+  const isTeacher = currentUser.role === 'teacher';
+  const isSuperOrTeacher = isSuperAdmin || isTeacher;
+
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isMenuOpen]);
+
+  // Format short class code: "Lớp 10A3" -> "10A3"
+  const getShortClass = (clsName?: string) => {
+    const raw = clsName || currentUser.assignedClassName || config.className || '10A3';
+    return raw.replace(/^Lớp\s*/i, '').trim() || raw;
+  };
+
+  const activeShortClass = getShortClass(
+    currentUser.assignedClassName || config.className
+  );
+
+  // Concise role label for the compact "Nút Quyền" button (NO email shown)
+  const getShortRoleButtonLabel = (): string => {
+    switch (currentUser.role) {
+      case 'super_admin':
+        return 'Super Admin';
+      case 'teacher':
+        return `GVCN ${activeShortClass}`;
+      case 'class_monitor':
+        return `BCS ${activeShortClass}`;
+      case 'team_leader':
+        return `Tổ ${currentUser.groupAccess} • ${activeShortClass}`;
+      case 'delegated':
+        return `Admin ${activeShortClass}`;
+      default:
+        return `Xem • ${activeShortClass}`;
+    }
+  };
 
   const currentRoleValue =
     currentUser.role === 'super_admin'
@@ -84,80 +132,66 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
       : currentUser.role === 'class_monitor'
       ? 'class_monitor'
       : currentUser.role === 'delegated'
-      ? currentUser.delegatedUserId
-        ? `delegated_${currentUser.delegatedUserId}`
-        : 'delegated_prompt'
+      ? 'delegated_prompt'
       : 'student';
 
   const handleSelectRole = (newRoleValue: string) => {
-    if (newRoleValue === currentRoleValue) return;
+    setIsMenuOpen(false);
     if (newRoleValue === 'student') {
       onChangeUser({
         role: 'student',
         name: 'Học sinh / Phụ huynh',
         groupAccess: 'all',
-        title: 'Tra cứu kết quả rèn luyện',
+        title: 'Chế độ xem tra cứu',
       });
     } else {
-      // Trigger access code authentication modal
       onRequestRoleChange(newRoleValue);
     }
   };
 
+  // Permission flags for visible tabs
+  const canSeeNotificationsTab =
+    isSuperOrTeacher ||
+    currentUser.role === 'class_monitor' ||
+    (currentUser.role === 'delegated' &&
+      Boolean(currentUser.delegatedPermissions?.canSendNotice));
+
+  const canSeeReportsTab =
+    isSuperOrTeacher || currentUser.role === 'class_monitor';
+
   return (
-    <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-      {/* Top Banner */}
+    <header className="no-print bg-white border-b border-slate-200 sticky top-0 z-30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between py-3 gap-3 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-500 text-white flex items-center justify-center shadow-md shadow-indigo-100">
-              <Award className="w-6 h-6" />
+        {/* Compact Top Row: Title on Left, Week + Unified Role/Function Button on Right */}
+        <div className="flex items-center justify-between py-2.5 gap-3 border-b border-slate-100">
+          {/* Left: App Title & Current Class */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+              <Award className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-                  Quản Lý Thi Đua Lớp Chủ Nhiệm
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate">
+                  Thi Đua Lớp Chủ Nhiệm
                 </h1>
-                <span className="px-2 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200">
-                  {config.className}
-                </span>
-                {homeroomClasses.length > 1 && isSuperOrTeacher && onOpenSuperAdminModal && (
-                  <button
-                    type="button"
-                    onClick={onOpenSuperAdminModal}
-                    className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-full border border-amber-300 transition-colors"
-                    title="Chuyển đổi lớp chủ nhiệm hoặc phân quyền Ban cán sự"
-                  >
-                    <Building2 className="w-3 h-3 text-amber-600" />
-                    Hệ thống {homeroomClasses.length} lớp
-                  </button>
-                )}
-                <span className="hidden sm:inline-block px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">
-                  Năm học {config.academicYear}
-                </span>
-                <span
-                  className="flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200"
-                  title="Dữ liệu được lưu trữ và tự động đồng bộ tức thì giữa điện thoại, máy tính và máy tính bảng qua Cloud Firestore"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Đồng bộ đa thiết bị
+                <span className="text-xs font-bold text-indigo-700 whitespace-nowrap">
+                  · {config.className}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                {config.schoolName} • GVCN:{' '}
-                <span className="font-medium text-slate-700">{config.homeroomTeacher}</span>
+              <p className="text-[11px] text-slate-500 truncate">
+                {config.schoolName} · Năm học {config.academicYear} · GVCN:{' '}
+                <span className="font-semibold text-slate-700">
+                  {config.homeroomTeacher}
+                </span>
               </p>
             </div>
           </div>
 
-          {/* Quick Selectors: Week & Role & Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Week & Semester Selector */}
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
-              <span className="text-xs font-semibold text-slate-500 pl-2 pr-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Tuần:
-              </span>
+          {/* Right: Week Selector, Bell (if permitted), and Single Unified Role & Functions Button */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Compact Week Selector */}
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 mr-1 hidden sm:inline" />
               <select
                 aria-label="Chọn tuần học"
                 value={config.currentWeek}
@@ -170,7 +204,7 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                     currentSemester: semester,
                   });
                 }}
-                className="bg-white text-xs font-semibold text-indigo-700 border border-slate-200 rounded px-2 py-1 shadow-2xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
               >
                 {weeks.map((w) => (
                   <option key={w} value={w}>
@@ -178,163 +212,381 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
                   </option>
                 ))}
               </select>
-              <span className="text-[11px] font-medium text-slate-500 px-2 py-0.5">
-                {config.currentWeek <= 18 ? 'Học kỳ 1 (18 tuần)' : 'Học kỳ 2 (17 tuần)'}
-              </span>
             </div>
 
-            {/* Role Switcher with Auth Protection */}
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
-              <span className="text-xs font-semibold text-slate-500 pl-2 pr-1 flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-                Quyền:
-              </span>
-              <select
-                aria-label="Chọn vai trò người dùng"
-                value={currentRoleValue}
-                onChange={(e) => handleSelectRole(e.target.value)}
-                className="bg-white text-xs font-semibold text-slate-800 border border-slate-200 rounded px-2 py-1 shadow-2xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              >
-                <optgroup label="Quản trị hệ thống Đa Lớp">
-                  <option value="super_admin">
-                    👑 Super Admin ({SUPER_ADMIN_EMAIL})
-                  </option>
-                </optgroup>
-                <optgroup label="Cán bộ lớp mặc định">
-                  <option value="teacher">🎓 Giáo viên chủ nhiệm (Khóa mã)</option>
-                  <option value="team_leader_1">🚩 Tổ trưởng Tổ 1 (Khóa mã)</option>
-                  <option value="team_leader_2">🚩 Tổ trưởng Tổ 2 (Khóa mã)</option>
-                  <option value="team_leader_3">🚩 Tổ trưởng Tổ 3 (Khóa mã)</option>
-                  <option value="team_leader_4">🚩 Tổ trưởng Tổ 4 (Khóa mã)</option>
-                  <option value="class_monitor">⭐ Ban cán sự (Khóa mã)</option>
-                </optgroup>
-                <optgroup label="Uỷ quyền người dùng khác">
-                  <option value="delegated_prompt">🔑 Đăng nhập mã uỷ quyền...</option>
-                  {delegatedUsers.map((du) => (
-                    <option key={du.id} value={`delegated_${du.id}`}>
-                      👤 {du.name} ({du.title}) {!du.isActive ? '[Tạm khóa]' : ''}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Chế độ công khai">
-                  <option value="student">👨‍👩‍👧 Học sinh / Phụ huynh (Công khai)</option>
-                </optgroup>
-              </select>
-            </div>
-
-            {/* Multi-Class & Officers Center Button (Super Admin & GVCN) */}
-            {isSuperOrTeacher && onOpenSuperAdminModal && (
+            {/* Urgent Alerts Bell (Only shown for roles with notification access) */}
+            {canSeeNotificationsTab && (
               <button
-                onClick={onOpenSuperAdminModal}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-amber-900 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-xs font-bold transition-colors shadow-2xs"
-                title="Quản lý đa lớp chủ nhiệm & Phân quyền Ban cán sự lớp"
-              >
-                <Crown className="w-3.5 h-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Đa Lớp & Ban Cán Sự</span>
-              </button>
-            )}
-
-            {/* Manage Access Codes Button (Super Admin & GVCN) */}
-            {isSuperOrTeacher && (
-              <button
-                onClick={onOpenManageAccessCodes}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-xs font-semibold transition-colors"
-                title="Quản lý mã cán bộ lớp và uỷ quyền người dùng khác"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Phân Quyền & Uỷ Quyền</span>
-                {delegatedUsers.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-200 text-indigo-800 font-bold">
-                    {delegatedUsers.length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* Urgent Alerts Bell (Super Admin, GVCN & Ban cán sự) */}
-            {(isSuperOrTeacher || currentUser.role === 'class_monitor') && (
-              <button
+                type="button"
                 onClick={onOpenAlerts}
-                className="relative p-2 rounded-lg text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
-                title="Thông báo tức thì vi phạm nghiêm trọng"
+                className="relative p-1.5 rounded-lg text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition-colors"
+                title="Thông báo vi phạm cần lưu ý"
               >
                 <Bell className="w-4 h-4" />
                 {severeAlertCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-xs">
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white tabular-nums">
                     {severeAlertCount}
                   </span>
                 )}
               </button>
             )}
 
-            {/* Config & Backup Buttons (Super Admin & GVCN) */}
-            {isSuperOrTeacher && (
-              <div className="flex items-center gap-1 border-l border-slate-200 pl-2">
-                <button
-                  onClick={onOpenCriteriaConfig}
-                  className="p-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-slate-200 transition-colors"
-                  title="Cấu hình tiêu chí chấm điểm"
-                >
-                  <Sliders className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={onOpenBackup}
-                  className="p-2 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg border border-slate-200 transition-colors"
-                  title="Sao lưu & Đồng bộ dữ liệu"
-                >
-                  <Database className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={onOpenSettings}
-                  className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
-                  title="Cài đặt thông tin lớp"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            {/* SINGLE UNIFIED ROLE & FUNCTIONS BUTTON ("Nút Quyền") */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors whitespace-nowrap ${
+                  currentUser.role === 'super_admin'
+                    ? 'bg-slate-900 text-amber-300 border-slate-800 hover:bg-slate-800'
+                    : currentUser.role === 'teacher'
+                    ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700'
+                    : currentUser.role === 'class_monitor' ||
+                      currentUser.role === 'team_leader'
+                    ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                    : currentUser.role === 'delegated'
+                    ? 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700'
+                    : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                }`}
+                title="Mở bảng phân quyền & các chức năng theo vai trò"
+              >
+                {currentUser.role === 'super_admin' ? (
+                  <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                )}
+                <span>{getShortRoleButtonLabel()}</span>
+                <ChevronDown className="w-3.5 h-3.5 opacity-80 shrink-0" />
+              </button>
+
+              {/* POPOVER MENU: ROLE-SCOPED FUNCTIONS & COMPACT ACCOUNT SWITCHER */}
+              {isMenuOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden text-xs">
+                  {/* 1. Current Active Role Summary (Compact, No Email) */}
+                  <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-black text-slate-900 text-xs">
+                          {getShortRoleButtonLabel()}
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-600 font-semibold truncate">
+                          {currentUser.name}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                        {isSuperAdmin
+                          ? `Quản trị toàn hệ thống (${homeroomClasses.length} lớp)`
+                          : `Phạm vi: ${
+                              currentUser.assignedClassName || config.className
+                            } ${
+                              currentUser.groupAccess &&
+                              currentUser.groupAccess !== 'all'
+                                ? `• Tổ ${currentUser.groupAccess}`
+                                : '• Toàn lớp'
+                            }`}
+                      </p>
+                    </div>
+
+                    {currentUser.role !== 'student' && (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRole('student')}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200 font-bold text-[11px] shrink-0 transition-colors"
+                        title="Đăng xuất về chế độ Xem"
+                      >
+                        <LogOut className="w-3 h-3" />
+                        Thoát
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 2. Super Admin Only: Quick Multi-Class Switcher */}
+                  {isSuperAdmin && homeroomClasses.length > 1 && (
+                    <div className="p-3 border-b border-slate-100 space-y-1.5">
+                      <div className="text-[11px] font-bold text-slate-500 flex items-center justify-between">
+                        <span>Chuyển lớp làm việc (Super Admin):</span>
+                        <span className="text-indigo-600 font-semibold">
+                          {homeroomClasses.length} lớp
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {homeroomClasses.map((cls) => {
+                          const isCurrent = cls.className === config.className;
+                          return (
+                            <button
+                              key={cls.id}
+                              type="button"
+                              onClick={() => {
+                                if (onSwitchHomeroomClass) {
+                                  onSwitchHomeroomClass(cls);
+                                }
+                                setIsMenuOpen(false);
+                              }}
+                              className={`px-2.5 py-1 rounded-lg font-bold text-xs border transition-colors ${
+                                isCurrent
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {getShortClass(cls.className)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Role-Scoped Management Functions (Only displayed for authorized roles) */}
+                  {isSuperOrTeacher && (
+                    <div className="p-2 border-b border-slate-100 space-y-0.5">
+                      <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {isSuperAdmin
+                          ? 'Chức năng Quản trị Đa Lớp'
+                          : `Chức năng Quản lý ${activeShortClass}`}
+                      </div>
+
+                      {onOpenSuperAdminModal && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMenuOpen(false);
+                            onOpenSuperAdminModal();
+                          }}
+                          className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-amber-50 text-slate-800 hover:text-amber-900 font-semibold transition-colors text-left"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>
+                              {isSuperAdmin
+                                ? 'Quản lý Đa Lớp & Phân quyền BCS'
+                                : `Phân quyền Ban cán sự ${activeShortClass}`}
+                            </span>
+                          </span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenManageAccessCodes();
+                        }}
+                        className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-indigo-50 text-slate-800 hover:text-indigo-900 font-semibold transition-colors text-left"
+                      >
+                        <span className="flex items-center gap-2">
+                          <KeyRound className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <span>
+                            Mã khóa Cán bộ & Uỷ quyền ({activeShortClass})
+                          </span>
+                        </span>
+                        {delegatedUsers.length > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-bold tabular-nums">
+                            {delegatedUsers.length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenCriteriaConfig();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-slate-100 text-slate-700 font-semibold transition-colors text-left"
+                      >
+                        <Sliders className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span>Cấu hình tiêu chí chấm điểm</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenSettings();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-slate-100 text-slate-700 font-semibold transition-colors text-left"
+                      >
+                        <Settings className="w-4 h-4 text-slate-500 shrink-0" />
+                        <span>Cài đặt thông tin lớp {activeShortClass}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onOpenBackup();
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl hover:bg-slate-100 text-slate-700 font-semibold transition-colors text-left"
+                      >
+                        <Database className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Sao lưu & Khôi phục dữ liệu</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 4. Switch Role / Login Section (Short, concise labels, NO email) */}
+                  <div className="p-2.5 space-y-1.5">
+                    <div className="px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Chuyển đổi quyền sử dụng
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRole('super_admin')}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-bold border text-left transition-colors ${
+                          currentRoleValue === 'super_admin'
+                            ? 'bg-slate-900 text-amber-300 border-slate-900'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          <span>Super Admin</span>
+                        </span>
+                        {currentRoleValue === 'super_admin' && (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRole('teacher')}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-bold border text-left transition-colors ${
+                          currentRoleValue === 'teacher'
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <span className="truncate">
+                          GVCN {activeShortClass}
+                        </span>
+                        {currentRoleValue === 'teacher' && (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRole('class_monitor')}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-bold border text-left transition-colors ${
+                          currentRoleValue === 'class_monitor'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <span className="truncate">BCS {activeShortClass}</span>
+                        {currentRoleValue === 'class_monitor' && (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectRole('delegated_prompt')}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg font-bold border text-left transition-colors ${
+                          currentUser.role === 'delegated'
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1 truncate">
+                          <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                          <span>Admin / Uỷ quyền</span>
+                        </span>
+                        {currentUser.role === 'delegated' && (
+                          <Check className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* 4 Team Leaders Compact Row */}
+                    <div className="grid grid-cols-4 gap-1 pt-0.5">
+                      {([1, 2, 3, 4] as const).map((g) => {
+                        const val = `team_leader_${g}`;
+                        const active = currentRoleValue === val;
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => handleSelectRole(val)}
+                            className={`py-1.5 px-1 rounded-lg font-bold text-center border transition-colors ${
+                              active
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            Tổ {g}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Public Viewer Mode */}
+                    <button
+                      type="button"
+                      onClick={() => handleSelectRole('student')}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg font-semibold border transition-colors ${
+                        currentRoleValue === 'student'
+                          ? 'bg-slate-200 text-slate-900 border-slate-300'
+                          : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      <span>Chế độ Xem (Học sinh / Phụ huynh)</span>
+                      {currentRoleValue === 'student' && (
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 no-scrollbar">
+        {/* Role-Filtered Tab Navigation */}
+        <nav className="flex space-x-1 sm:space-x-1.5 overflow-x-auto py-1.5 no-scrollbar">
           <button
+            type="button"
             onClick={() => onSelectTab('dashboard')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
               activeTab === 'dashboard'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Award className="w-4 h-4" />
-            Tổng quan & Thống kê
+            <Award className="w-3.5 h-3.5" />
+            Tổng quan
           </button>
 
           <button
+            type="button"
             onClick={() => onSelectTab('daily_logs')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
               activeTab === 'daily_logs'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <BookOpen className="w-4 h-4" />
-            Nhật ký sinh hoạt lớp (4 Tổ)
+            <BookOpen className="w-3.5 h-3.5" />
+            Nhật ký sinh hoạt
           </button>
 
           <button
+            type="button"
             onClick={() => onSelectTab('schedule')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
               activeTab === 'schedule'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <CalendarClock className="w-4 h-4" />
-            Lịch hoạt động & Nhắc việc
+            <CalendarClock className="w-3.5 h-3.5" />
+            Lịch & Nhắc việc
             {pendingScheduleCount > 0 && (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold tabular-nums ${
                   activeTab === 'schedule'
                     ? 'bg-white text-indigo-700'
                     : 'bg-amber-100 text-amber-800'
@@ -346,152 +598,62 @@ export const HeaderNav: React.FC<HeaderNavProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onSelectTab('emulation_table')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
               activeTab === 'emulation_table'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4" />
-            Bảng điểm & Xếp hạng tuần
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Bảng điểm tuần
           </button>
 
           <button
+            type="button"
             onClick={() => onSelectTab('students')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
               activeTab === 'students'
-                ? 'bg-indigo-600 text-white shadow-xs'
+                ? 'bg-indigo-600 text-white'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
-            <Users className="w-4 h-4" />
-            Danh sách học sinh ({studentCount})
+            <Users className="w-3.5 h-3.5" />
+            Học sinh ({studentCount})
           </button>
 
-          <button
-            onClick={() => onSelectTab('notifications')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-              activeTab === 'notifications'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Send className="w-4 h-4" />
-            Thông báo Zalo & Email
-          </button>
-
-          <button
-            onClick={() => onSelectTab('reports')}
-            className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-              activeTab === 'reports'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <Printer className="w-4 h-4" />
-            Xuất Báo Cáo PDF Cá Nhân
-          </button>
-        </nav>
-      </div>
-
-      {/* Role Notice Indicator */}
-      <div className="bg-slate-50 border-t border-slate-200 px-4 py-1.5 text-xs text-slate-700 flex items-center justify-between">
-        <div className="flex items-center gap-2 max-w-7xl mx-auto w-full">
-          <span
-            className={`font-semibold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded ${
-              currentUser.role === 'super_admin'
-                ? 'bg-amber-200 text-amber-950 font-black'
-                : currentUser.role === 'delegated'
-                ? 'bg-purple-100 text-purple-900'
-                : currentUser.role === 'teacher'
-                ? 'bg-indigo-100 text-indigo-900'
-                : currentUser.role === 'student'
-                ? 'bg-slate-200 text-slate-700'
-                : 'bg-blue-100 text-blue-900'
-            }`}
-          >
-            {currentUser.role === 'super_admin'
-              ? '👑 SUPER ADMIN:'
-              : currentUser.role === 'delegated'
-              ? 'UỶ QUYỀN GVCN:'
-              : 'Đang đăng nhập:'}
-          </span>
-          <span className="font-bold text-slate-900">
-            {currentUser.title} — {currentUser.name}
-          </span>
-
-          {currentUser.role === 'delegated' && currentUser.delegatedPermissions && (
-            <div className="hidden lg:flex items-center gap-1.5 ml-2">
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200">
-                Phạm vi: {currentUser.groupAccess === 'all' ? 'Cả lớp' : `Tổ ${currentUser.groupAccess}`}
-              </span>
-              {currentUser.delegatedPermissions.canLogDaily && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
-                  Ghi nhật ký
-                </span>
-              )}
-              {currentUser.delegatedPermissions.canAdjustScores && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 font-semibold border border-purple-200">
-                  Sửa điểm
-                </span>
-              )}
-            </div>
+          {canSeeNotificationsTab && (
+            <button
+              type="button"
+              onClick={() => onSelectTab('notifications')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+                activeTab === 'notifications'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <Send className="w-3.5 h-3.5" />
+              Thông báo PH
+            </button>
           )}
 
-          <div className="ml-auto flex items-center gap-3">
-            {!isSuperOrTeacher ? (
-              <>
-                <button
-                  onClick={() => onRequestRoleChange('super_admin')}
-                  className="underline font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1"
-                >
-                  <Crown className="w-3 h-3" /> Super Admin
-                </button>
-                <button
-                  onClick={() => onRequestRoleChange('teacher')}
-                  className="underline font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                >
-                  Đăng nhập GVCN <ChevronRight className="w-3 h-3" />
-                </button>
-              </>
-            ) : (
-              <>
-                {onOpenSuperAdminModal && (
-                  <button
-                    onClick={onOpenSuperAdminModal}
-                    className="font-bold text-amber-700 hover:text-amber-900 flex items-center gap-1"
-                  >
-                    <Crown className="w-3 h-3" /> Quản lý Đa Lớp & BCS
-                  </button>
-                )}
-                <button
-                  onClick={onOpenManageAccessCodes}
-                  className="font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-                >
-                  <KeyRound className="w-3 h-3" /> Phân quyền & Uỷ quyền
-                </button>
-              </>
-            )}
-
+          {canSeeReportsTab && (
             <button
-              onClick={() =>
-                onChangeUser({
-                  role: 'student',
-                  name: 'Học sinh / Phụ huynh',
-                  groupAccess: 'all',
-                  title: 'Tra cứu kết quả rèn luyện',
-                })
-              }
-              className="text-slate-400 hover:text-rose-600 flex items-center gap-1"
-              title="Đăng xuất quyền để chuyển về chế độ tra cứu"
+              type="button"
+              onClick={() => onSelectTab('reports')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors ${
+                activeTab === 'reports'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
             >
-              <LogOut className="w-3 h-3" /> Thoát quyền
+              <Printer className="w-3.5 h-3.5" />
+              Báo cáo PDF
             </button>
-          </div>
-        </div>
+          )}
+        </nav>
       </div>
     </header>
   );
 };
-

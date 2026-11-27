@@ -90,8 +90,14 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
   onBatchImportStudents,
 }) => {
   // Only Super Admin or Teacher has permission to add, edit, or delete students
-  const isTeacher =
-    currentUser.role === 'super_admin' || currentUser.role === 'teacher';
+  const isSuperAdmin = currentUser.role === 'super_admin';
+  const isTeacher = isSuperAdmin || currentUser.role === 'teacher';
+
+  // Non-Super-Admin roles (GVCN, BCS, Tổ trưởng, HS) only see their assigned class
+  const visibleHomeroomClasses = useMemo(() => {
+    if (isSuperAdmin) return homeroomClasses;
+    return homeroomClasses.filter((c) => c.className === className);
+  }, [isSuperAdmin, homeroomClasses, className]);
 
   const [selectedGroup, setSelectedGroup] = useState<GroupNumber | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -658,16 +664,16 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
   };
 
   return (
-    <div className="space-y-5">
-      {/* MULTI-CLASS SELECTOR BAR (CHỌN LỚP CHỦ NHIỆM ĐỂ QUẢN LÝ HỌC SINH) */}
-      {homeroomClasses.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-4">
+      {/* MULTI-CLASS SELECTOR BAR (CHỈ HIỂN THỊ CHO SUPER ADMIN QUẢN LÝ ĐA LỚP) */}
+      {isSuperAdmin && visibleHomeroomClasses.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5 mr-1">
               <Building2 className="w-4 h-4 text-indigo-600" />
-              Chọn Lớp quản lý học sinh:
+              Chọn Lớp:
             </span>
-            {homeroomClasses.map((cls) => {
+            {visibleHomeroomClasses.map((cls) => {
               const isCurrent = cls.className === className;
               const count = studentCountByClass[cls.className] || 0;
               return (
@@ -689,7 +695,7 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                 >
                   <span>{cls.className}</span>
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] tabular-nums ${
                       isCurrent
                         ? 'bg-white/20 text-white'
                         : 'bg-slate-200 text-slate-700'
@@ -702,14 +708,14 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
             })}
           </div>
 
-          {isTeacher && onOpenAddClassModal && (
+          {onOpenAddClassModal && (
             <button
               type="button"
               onClick={onOpenAddClassModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold whitespace-nowrap transition-colors"
             >
               <Plus className="w-3.5 h-3.5 text-amber-700" />
-              + Thêm / Quản Lý Đa Lớp
+              Quản Lý Đa Lớp
             </button>
           )}
         </div>
@@ -1157,8 +1163,8 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                             }
                             className="bg-white border border-slate-300 rounded px-2 py-1 font-semibold text-indigo-700 text-xs"
                           >
-                            {homeroomClasses.length > 0 ? (
-                              homeroomClasses.map((c) => (
+                            {visibleHomeroomClasses.length > 0 ? (
+                              visibleHomeroomClasses.map((c) => (
                                 <option key={c.id} value={c.className}>
                                   {c.className}
                                 </option>
@@ -1420,8 +1426,8 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                     onChange={(e) => setBatchAddTargetClass(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-bold text-indigo-700"
                   >
-                    {homeroomClasses.length > 0 ? (
-                      homeroomClasses.map((cls) => (
+                    {visibleHomeroomClasses.length > 0 ? (
+                      visibleHomeroomClasses.map((cls) => (
                         <option key={cls.id} value={cls.className}>
                           {cls.className} — GVCN: {cls.homeroomTeacher} (Hiện có{' '}
                           {studentCountByClass[cls.className] || 0} HS)
@@ -1810,26 +1816,28 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  2. Chuyển Lớp Chủ Nhiệm hàng loạt:
-                </label>
-                <select
-                  value={bulkEditTargetClass}
-                  onChange={(e) => setBulkEditTargetClass(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900"
-                >
-                  <option value="keep">
-                    — Giữ nguyên lớp hiện tại ({className}) —
-                  </option>
-                  {homeroomClasses.map((cls) => (
-                    <option key={cls.id} value={cls.className}>
-                      <ArrowRightLeft className="w-3 h-3 inline" /> Chuyển sang{' '}
-                      {cls.className} (GVCN: {cls.homeroomTeacher})
+              {isSuperAdmin && visibleHomeroomClasses.length > 1 && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    2. Chuyển Lớp Chủ Nhiệm hàng loạt:
+                  </label>
+                  <select
+                    value={bulkEditTargetClass}
+                    onChange={(e) => setBulkEditTargetClass(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold text-slate-900"
+                  >
+                    <option value="keep">
+                      — Giữ nguyên lớp hiện tại ({className}) —
                     </option>
-                  ))}
-                </select>
-              </div>
+                    {visibleHomeroomClasses.map((cls) => (
+                      <option key={cls.id} value={cls.className}>
+                        <ArrowRightLeft className="w-3 h-3 inline" /> Chuyển sang{' '}
+                        {cls.className} (GVCN: {cls.homeroomTeacher})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2028,8 +2036,8 @@ export const StudentManagementModal: React.FC<StudentManagementModalProps> = ({
                     onChange={(e) => setFormClassName(e.target.value)}
                     className="w-full bg-white border border-slate-300 rounded-lg p-2 font-bold text-indigo-700"
                   >
-                    {homeroomClasses.length > 0 ? (
-                      homeroomClasses.map((cls) => (
+                    {visibleHomeroomClasses.length > 0 ? (
+                      visibleHomeroomClasses.map((cls) => (
                         <option key={cls.id} value={cls.className}>
                           {cls.className}
                         </option>

@@ -24,7 +24,6 @@ import {
   Student,
   CurrentUser,
 } from '../types';
-import { SUPER_ADMIN_EMAIL } from '../firebase';
 
 interface SuperAdminMultiClassModalProps {
   isOpen: boolean;
@@ -56,7 +55,12 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
   onUpdateStudentRole,
   onManageClassStudents,
 }) => {
-  const [activeTab, setActiveTab] = useState<'classes' | 'officers' | 'new_class'>('classes');
+  const isSuperAdmin = currentUser.role === 'super_admin';
+  const canManageClasses = isSuperAdmin || currentUser.role === 'teacher';
+
+  const [activeTab, setActiveTab] = useState<'classes' | 'officers' | 'new_class'>(
+    isSuperAdmin ? 'classes' : 'officers'
+  );
   const [selectedClassId, setSelectedClassId] = useState<string>(
     homeroomClasses.find((c) => c.className === currentConfig.className)?.id ||
       homeroomClasses[0]?.id ||
@@ -85,11 +89,17 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
 
   if (!isOpen) return null;
 
-  const isSuperAdmin = currentUser.role === 'super_admin';
-  const canManageClasses = isSuperAdmin || currentUser.role === 'teacher';
+  // Non-Super-Admin (GVCN) only sees their assigned class
+  const assignedClassName =
+    currentUser.assignedClassName || currentConfig.className;
+  const visibleClasses = isSuperAdmin
+    ? homeroomClasses
+    : homeroomClasses.filter((c) => c.className === assignedClassName);
 
   const selectedClass =
-    homeroomClasses.find((c) => c.id === selectedClassId) || homeroomClasses[0];
+    visibleClasses.find((c) => c.id === selectedClassId) ||
+    visibleClasses[0] ||
+    homeroomClasses[0];
 
   const showFeedback = (msg: string) => {
     setFeedbackMsg(msg);
@@ -276,7 +286,7 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
 📌 Hướng dẫn: Ban cán sự và Tổ trưởng chọn đúng vai trò trên thanh công cụ và nhập Mã đăng nhập để ghi sổ sinh hoạt lớp, phân công trực nhật và gửi nhắc việc.`;
   };
 
-  const filteredClasses = homeroomClasses.filter((cls) => {
+  const filteredClasses = visibleClasses.filter((cls) => {
     if (!searchClassQuery.trim()) return true;
     const q = searchClassQuery.toLowerCase();
     return (
@@ -286,8 +296,8 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
     );
   });
 
-  const isSelectedCurrentActive =
-    selectedClass && selectedClass.className === currentConfig.className;
+  const shortClass = (clsName: string) =>
+    clsName.replace(/^Lớp\s*/i, '').trim() || clsName;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/65 backdrop-blur-xs">
@@ -295,20 +305,26 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
         {/* Top Header */}
         <div className="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
-              <Crown className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shrink-0">
+              <Crown className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base sm:text-lg font-black tracking-tight">
-                  Trung Tâm Quản Trị Hệ Thống Đa Lớp & Phân Quyền Ban Cán Sự
+                  {isSuperAdmin
+                    ? 'Quản Trị Hệ Thống Đa Lớp & Phân Quyền Ban Cán Sự'
+                    : `Phân Quyền Ban Cán Sự & 4 Tổ Trưởng — ${assignedClassName}`}
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-slate-950 uppercase tracking-wider">
-                  Super Admin • {SUPER_ADMIN_EMAIL}
+                  {isSuperAdmin
+                    ? 'Super Admin'
+                    : `GVCN ${shortClass(assignedClassName)}`}
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Quản lý nhiều lớp chủ nhiệm, điều phối Giáo viên chủ nhiệm và phân quyền trực tiếp cho Ban cán sự lớp & 4 Tổ trưởng
+                {isSuperAdmin
+                  ? 'Quản lý nhiều lớp chủ nhiệm, điều phối GVCN và phân quyền Ban cán sự lớp & 4 Tổ trưởng'
+                  : `Quản lý thông tin lớp và cấp mã khóa trực tiếp cho Ban cán sự & 4 Tổ trưởng của ${assignedClassName}`}
               </p>
             </div>
           </div>
@@ -333,18 +349,20 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
         {/* Navigation Sub-tabs */}
         <div className="px-6 pt-3 pb-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setActiveTab('classes')}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'classes'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              Danh Sách Lớp Chủ Nhiệm ({homeroomClasses.length} lớp)
-            </button>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('classes')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  activeTab === 'classes'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <Building2 className="w-4 h-4" />
+                Danh Sách Lớp ({visibleClasses.length} lớp)
+              </button>
+            )}
 
             <button
               type="button"
@@ -356,10 +374,10 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
               }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              Phân Quyền Ban Cán Sự Lớp & 4 Tổ Trưởng
+              Phân Quyền Ban Cán Sự & 4 Tổ Trưởng
             </button>
 
-            {canManageClasses && (
+            {isSuperAdmin && (
               <button
                 type="button"
                 onClick={handleStartAddClass}
@@ -370,13 +388,13 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
                 }`}
               >
                 <Plus className="w-4 h-4" />
-                {editingClassId ? 'Chỉnh Sửa Lớp Chủ Nhiệm' : '+ Thêm Lớp Chủ Nhiệm Mới'}
+                {editingClassId ? 'Chỉnh Sửa Lớp Chủ Nhiệm' : '+ Thêm Lớp Mới'}
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-slate-500">Đang làm việc tại:</span>
+            <span className="text-slate-500">Lớp:</span>
             <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
               {currentConfig.className} (GVCN: {currentConfig.homeroomTeacher})
             </span>
@@ -385,16 +403,16 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
 
         {/* Body Content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-5 text-xs">
-          {/* TAB 1: MULTI-CLASS LIST & SWITCHER */}
-          {activeTab === 'classes' && (
+          {/* TAB 1: MULTI-CLASS LIST & SWITCHER (SUPER ADMIN) */}
+          {activeTab === 'classes' && isSuperAdmin && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    Hệ Thống Quản Lý Nhiều Lớp Chủ Nhiệm ({homeroomClasses.length} lớp đang hoạt động)
+                    Hệ Thống Quản Lý Nhiều Lớp Chủ Nhiệm ({visibleClasses.length} lớp)
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Super Admin ({SUPER_ADMIN_EMAIL}) có thể chuyển đổi nhanh giữa các lớp chủ nhiệm, phân công GVCN và cấp mã khóa cho Ban cán sự từng lớp.
+                    Chuyển đổi nhanh giữa các lớp chủ nhiệm, phân công GVCN và cấp mã khóa cho Ban cán sự từng lớp.
                   </p>
                 </div>
 
@@ -618,9 +636,11 @@ export const SuperAdminMultiClassModal: React.FC<SuperAdminMultiClassModalProps>
               {/* Class Selector Bar */}
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-slate-700">Chọn lớp cần phân quyền Ban cán sự:</span>
+                  <span className="font-bold text-slate-700">
+                    {isSuperAdmin ? 'Chọn lớp phân quyền Ban cán sự:' : 'Lớp phụ trách:'}
+                  </span>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {homeroomClasses.map((cls) => (
+                    {visibleClasses.map((cls) => (
                       <button
                         key={cls.id}
                         type="button"
